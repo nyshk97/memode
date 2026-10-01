@@ -107,8 +107,8 @@ Cursor の AI 機能・チャット・ターミナルはほぼ使っていない
 ### Phase 7: 配布と常用版 [AI🤖]
 - [x] アイコン（dev 版は「DEV」の印付き）
 - [x] Sparkle（常駐して存在を忘れる系なので、自動チェックを ON）。dev 版には `SUFeedURL` を入れない
-- [ ] 配信用のリポジトリ `memode-releases`、`docs/CHANGELOG.md`、`scripts/changelog.py`、`build.sh`（`--skip-notarize` 付き）、`release.sh`、`mise run release`。手順は personal-mac-apps.md の「リリース」に従う
-- [ ] `nyshk97/tap` に cask を足し、Brewfile に `cask 'nyshk97/tap/memode'` を足す
+- [x] 配信用のリポジトリ `memode-releases`、`docs/CHANGELOG.md`、`scripts/changelog.py`、`build.sh`（`--skip-notarize` 付き）、`release.sh`、`mise run release`。手順は personal-mac-apps.md の「リリース」に従う
+- [x] `nyshk97/tap` に cask を足し、Brewfile に `cask 'nyshk97/tap/memode'` を足す
 - [x] `VERIFY.md` に、ここまでで通った検証の手順を書く
 
 ### 動作確認 [人間👨‍💻]
@@ -135,6 +135,7 @@ Cursor の AI 機能・チャット・ターミナルはほぼ使っていない
 - JS には一覧をパスだけ・変わったときだけ送る（版の番号で判断。JS が一覧を持っていなければ `quickOpenResend` で送り直してもらう）
 - ドロップ対策（実装のレビューで出た P1 のうち、ユーザーが入れると決めたもの）: Finder からのファイルのドロップは `EditorWebView.performDragOperation` で受けてタブで開き、エディタ以外のページへの移動は `WKNavigationDelegate` で止める。`--selftest` の `navigation_blocked`（`about:blank` への移動）は、止める処理を外した版で NG、入れた版で OK になることを確認（`file://` への移動は WebKit 自身が断るので、それで試すと止める処理を外しても通ってしまった）
 - Phase 7: アイコンは `scripts/make-icon.swift`（フルブリード・dev 版は DEV の帯）。リリースのスクリプトは MenuBar Tidy の原本から。CHANGELOG の頭を原本から切り出すとき、「書き方」の例の中の `## [Unreleased]` で切ってしまい `changelog.py check` が落ちた（原本のメモにある罠そのもの）。`make-release-zip.sh` の `$FEED_URL）` は bash 3.2 の全角の罠で、検出の正規表現で見つけて `${FEED_URL}` に直した
+- v0.1.0 をリリース（2026-10-01）: 公証は Accepted。`gh release download` したものが `spctl` で「Notarized Developer ID」、`stapler validate` も通り、cask の sha256 と一致。Sparkle の `sign_update` は初回に keychain の許可（SecurityAgent）が出たので、リリースの前に一度叩いて済ませた。Brewfile に `cask 'nyshk97/tap/memode'` を足して入れた（`brew bundle` は無関係の hashicorp/tap が未 trust で止まったので `brew trust hashicorp/tap`。docker-desktop の更新は sudo で失敗したが memode は入った）
 - 独自の URL スキーム（`WKURLSchemeHandler`）で配った worker は動く（worker から返事が来ることで確認）。Resource Timing には worker の読み込みが載らないので、その判定には使えない
 - dev 版の `--selftest`（キーは `NSEvent` を作って `NSApp.sendEvent` に流す）で、両方のスタイルとも 20 項目が全部通った（2026-10-01）。Cmd+N/P/S/Shift+S/W/1・Cmd+\ はメインメニューに届き、Cmd+A/C/X/V も効く
 - **Ctrl+Tab はメインメニューのキーとしては届かなかった**（修正前の selftest で `menu_ctrl_tab NG got=(none)`）。`bridge.ts` で keydown を拾い、`action` として Swift に回すようにして通した
