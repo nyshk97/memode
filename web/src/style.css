@@ -1,0 +1,195 @@
+/* 色は VS Code の既定のテーマ（Dark Modern / Light Modern）に寄せる */
+:root {
+  --bg: #ffffff;
+  --tabbar-bg: #f3f3f3;
+  --tab-bg: #ececec;
+  --tab-fg: #616161;
+  --tab-active-bg: #ffffff;
+  --tab-active-fg: #333333;
+  --tab-active-border: #005fb8;
+  --border: #e5e5e5;
+  --status-bg: #f3f3f3;
+  --status-fg: #616161;
+  --pick-bg: #ffffff;
+  --pick-selected: #e8e8e8;
+  --pick-detail: #8a8a8a;
+  --pick-shadow: rgba(0, 0, 0, 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e;
+    --tabbar-bg: #252526;
+    --tab-bg: #2d2d2d;
+    --tab-fg: #969696;
+    --tab-active-bg: #1e1e1e;
+    --tab-active-fg: #ffffff;
+    --tab-active-border: #0078d4;
+    --border: #2b2b2b;
+    --status-bg: #181818;
+    --status-fg: #a0a0a0;
+    --pick-bg: #252526;
+    --pick-selected: #04395e;
+    --pick-detail: #8a8a8a;
+    --pick-shadow: rgba(0, 0, 0, 0.5);
+  }
+}
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  font: 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+#groups {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+#groups.split .group + .group {
+  border-left: 1px solid var(--border);
+}
+/* 分割中、フォーカスの無い側は少し沈める */
+#groups.split .group:not(.active) .tab.active {
+  border-top-color: transparent;
+}
+
+.tabbar {
+  display: flex;
+  height: 35px;
+  flex: none;
+  background: var(--tabbar-bg);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.tabbar::-webkit-scrollbar {
+  display: none;
+}
+/* 角丸の内側から始める */
+.group:first-child .tabbar {
+  padding-left: 10px;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 0 6px 0 12px;
+  background: var(--tab-bg);
+  color: var(--tab-fg);
+  border-top: 1px solid transparent;
+  border-right: 1px solid var(--border);
+  cursor: default;
+  white-space: nowrap;
+}
+.tab.active {
+  background: var(--tab-active-bg);
+  color: var(--tab-active-fg);
+  border-top-color: var(--tab-active-border);
+}
+.tab .label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab .close {
+  width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 4px;
+  visibility: hidden;
+}
+.tab.active .close,
+.tab:hover .close {
+  visibility: visible;
+}
+.tab .close:hover {
+  background: rgba(128, 128, 128, 0.25);
+}
+
+.editor-host {
+  flex: 1;
+  min-height: 0;
+}
+
+#statusbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 14px;
+  background: var(--status-bg);
+  color: var(--status-fg);
+  border-top: 1px solid var(--border);
+}
+#statusbar .spacer {
+  flex: 1;
+}
+#statusbar .clickable {
+  padding: 0 6px;
+  border-radius: 3px;
+}
+#statusbar .clickable:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
+.quickpick {
+  position: fixed;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, 80vw);
+  background: var(--pick-bg);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px var(--pick-shadow);
+  padding: 6px;
+  z-index: 100;
+}
+.quickpick input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  border: 1px solid var(--tab-active-border);
+  border-radius: 3px;
+  background: var(--bg);
+  color: var(--tab-active-fg);
+  outline: none;
+}
+.quickpick-list {
+  max-height: 360px;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+.quickpick-item {
+  display: flex;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  color: var(--tab-active-fg);
+  font-size: 13px;
+}
+.quickpick-item.selected {
+  background: var(--pick-selected);
+}
+.quickpick-item .detail {
+  color: var(--pick-detail);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,100 @@
+import * as monaco from "./monaco.generated";
+import EditorWorker from "../node_modules/monaco-editor/esm/vs/editor/editor.worker.js?worker";
+import { install, post, type EditorHost } from "./bridge";
+import { allLanguages } from "./languages";
+import { quickPickDebug, showQuickPick } from "./quickpick";
+import { Workspace } from "./workspace";
+import { FileController } from "./files";
+import "./style.css";
+
+// 言語サービス（TS・JSON 等）は入れていないので、worker はエディタ本体の 1 種類だけ。
+// worker から返事が来たかを覚えておく（独自の URL スキームで worker が動くかの確認用）
+let workerAlive = false;
+self.MonacoEnvironment = {
+  getWorker: () => {
+    const worker = new EditorWorker();
+    worker.addEventListener("message", () => (workerAlive = true));
+    worker.addEventListener("error", (e) => post({ type: "log", event: "worker.error", detail: String(e.message) }));
+    return worker;
+  },
+};
+
+const dark = window.matchMedia("(prefers-color-scheme: dark)");
+const applyTheme = () => monaco.editor.setTheme(dark.matches ? "vs-dark" : "vs");
+applyTheme();
+dark.addEventListener("change", applyTheme);
+
+const chooseLanguage = () => {
+  const current = workspace.activeDoc.model.getLanguageId();
+  showQuickPick({
+    placeholder: "言語を選ぶ",
+    items: allLanguages().map((l) => ({ label: l.name, detail: l.id === current ? "（いまの言語）" : l.id, value: l.id })),
+    onPick: (item) => {
+      workspace.setLanguage(item.value);
+      workspace.focus();
+    },
+    onCancel: () => workspace.focus(),
+  });
+};
+
+const workspace = new Workspace(
+  document.getElementById("groups")!,
+  { language: document.getElementById("status-language")!, position: document.getElementById("status-position")! },
+  chooseLanguage,
+);
+
+const files = new FileController(workspace);
+
+const host: EditorHost = {
+  focus: () => workspace.focus(),
+  setContent(value, language) {
+    const model = workspace.activeDoc.model;
+    model.setValue(value);
+    if (language) workspace.setLanguage(language);
+  },
+  command(name, index) {
+    switch (name) {
+      case "new_tab":
+        return workspace.newTab();
+      case "close_tab":
+        return workspace.closeTab();
+      case "select_tab":
+        return workspace.selectTab(index ?? 1);
+      case "next_tab":
+        return workspace.cycleTab(1);
+      case "previous_tab":
+        return workspace.cycleTab(-1);
+      case "toggle_split":
+        return workspace.toggleSplit();
+      case "choose_language":
+        return chooseLanguage();
+      case "save":
+        return files.save(workspace.activeDoc, false);
+      case "save_as":
+        return files.save(workspace.activeDoc, true);
+      default:
+        post({ type: "log", event: "command.unknown", detail: name });
+    }
+  },
+  handleFileMessage: (msg) => files.handle(msg),
+  debugState() {
+    const editor = workspace.activeEditor;
+    const selections = editor.getSelections() ?? [];
+    return {
+      value: editor.getValue(),
+      cursorCount: selections.length,
+      cursors: selections.map((s) => ({ line: s.positionLineNumber, column: s.positionColumn })),
+      focused: editor.hasTextFocus(),
+      workspace: workspace.debugInfo(),
+      quickPick: quickPickDebug(),
+      tokenClassCount: new Set(
+        Array.from(document.querySelectorAll(".group.active .view-line span span")).map((el) => el.className),
+      ).size,
+      workerLoaded: workerAlive,
+    };
+  },
+};
+
+window.addEventListener("error", (e) => post({ type: "log", event: "js.error", detail: String(e.message) }));
+install(host);
+workspace.focus();

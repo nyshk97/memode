@@ -1,0 +1,51 @@
+# memode
+
+左 Shift のダブルタップで出し入れするポップアップ型のエディタ（自分専用の Mac アプリ）。
+計画と決めたことは `docs/plans/2026-10-01-1034memode-popup-editor.md`。
+
+## 構成
+
+- `App/`: Swift（AppKit）。ポップアップ（NSPanel）・メニュー・ファイルの読み書き・Swift と JS の受け渡し
+- `web/`: エディタ部分（Vite + TypeScript + Monaco）。ビルド結果 `web/dist/editor` を `.app` の Resources/editor に入れ、
+  `memode-editor://app/` という独自の URL スキームで読む（`file://` だと Monaco の worker が動かない）
+- Swift ⇄ JS のやり取りは `web/src/bridge.ts`（`EditorHost`）だけを通す。エディタは Monaco に決定済み（日本語入力をユーザーが確認。2026-10-01）
+- パネルは nonactivating（前面のアプリを切り替えずにキー入力だけ受ける）。activating への切り替えは dev 版のメニューに残してある
+- `web/src/workspace.ts`: タブ（文書 = Monaco の model）と左右分割（グループ。最大 2 つ）。同じ文書を左右で開くと model を共有する。
+  `quickpick.ts` は上に出る絞り込み付きの一覧（言語の選択・Cmd+P）
+- 保存・セッション: 中身とタブの状態は JS（`web/src/files.ts`・`session.ts`）、ファイルの読み書き・確認のダイアログ・`session.json` は
+  Swift（`DocumentService`・`FileIO`・`SessionStore`）。JS は Swift から `restore` を受け取るまでセッションを書かない（起動直後の空の状態で上書きしないため）
+- ファイルを開く: Cmd+O・Cmd+P・`memode <path>`（`scripts/memode`。`memode://open?path=<encodeURIComponent>` を `open -b` で開く）は、どれも
+  Swift の `DocumentService.open(paths:)` を通る。登録フォルダ・最近使ったファイルは `<データ>/folders.json`・`recent.json`。
+  Cmd+P の一覧（`FolderIndex`）は**ホームの下全部**（除く: ~/Library（CloudStorage 以外）・~/OrbStack・~/Applications・~/Music・~/Movies・~/Pictures・
+  ホーム直下の隠しディレクトリ・どこにあっても node_modules / build / .git / .ssh 等）と、登録フォルダ全部（ホームの外や、ホームの一覧で除いている場所を探したいとき）。git のリポジトリの中は `git ls-files`（.gitignore に従う）。
+  起動時に裏で作り、Cmd+P のときに 5 分より古ければ裏で作り直す。JS には変わったときだけパスの一覧を送る。
+  git は `/usr/bin/git` でなく `xcrun --find git` の場所を使う（入口の方はアプリから初回に数秒かかる）。
+  たどるときは `FileManager.enumerator(atPath:)` の相対パスを使う（URL でたどると /var と /private/var のように書き方がずれ、除く場所の判定が狂った）
+- `mise run install-cli` で `~/.local/bin/memode` に入れる
+- 終了時は `applicationShouldTerminate` で `.terminateLater` を返し、JS から最後のセッションが届いて書き終わるまで待つ（3 秒で諦める）。
+  この待ち合わせは main キューでなく run loop に載せる（終了が main キューのジョブの中から呼ばれると、main キューに積んだものは動かない）
+- メニューの操作は Swift の `AppDelegate.perform` を通り、タブと分割に関わるものは `{type: "command"}` として JS に送る
+- `web/src/monaco.generated.ts` は `web/scripts/gen-monaco-entry.mjs` が毎回作る（言語サービスを除いた Monaco の読み込み口。gitignore）
+- アプリのショートカットは `App/MainMenu.swift` のメインメニューに置く（Monaco 側でこれらのキーを使わない）。
+  Ctrl+Tab だけはメニューのキーとして届かないので、`bridge.ts` で拾って `action` として Swift に回す
+
+## dev 版と常用版
+
+| | dev 版（Debug） | 常用版（Release） |
+|---|---|---|
+| 表示名 | Memode-dev | Memode |
+| bundle id | local.nyshk97.memode.dev | local.nyshk97.memode |
+| URL スキーム | memode-dev:// | memode:// |
+| ログ | ~/Library/Logs/memode-dev/memode.log | ~/Library/Logs/memode/memode.log |
+| データ | ~/Memode-dev/ | ~/Memode/ |
+
+## ビルドと起動
+
+- `mise run build`: web のビルド → 署名用 xcconfig の生成 → xcodegen → xcodebuild（dev 版）
+- `mise run start` / `mise run stop`: dev 版を起動（ポップアップを出す）/ 終了
+- 署名のハッシュ・Team ID は public リポジトリに書かない。`scripts/gen-signing-xcconfig.sh` が keychain から引いて `*.local.xcconfig`（gitignore）に書く
+- `.xcodeproj` は生成物（gitignore）。設定は `project.yml` を直す
+
+## 検証
+
+`VERIFY.md` を見る。dev 版の起動引数 `--selftest` で、キー操作・メニュー・クリップボード・フォーカスの戻りを自動で確かめられる。

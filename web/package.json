@@ -1,0 +1,17 @@
+{
+  "name": "memode-editor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen": "node scripts/gen-monaco-entry.mjs",
+    "build": "node scripts/gen-monaco-entry.mjs && tsc --noEmit && vite build",
+    "dev": "vite"
+  },
+  "dependencies": {
+    "monaco-editor": "0.57.0"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.1"
+  }
+}

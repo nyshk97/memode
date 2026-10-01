@@ -1,0 +1,66 @@
+[tools]
+node = "24"
+
+[tasks.gen]
+description = "署名用の xcconfig を作り、XcodeGen で .xcodeproj を作る"
+run = "bash scripts/gen-signing-xcconfig.sh && xcodegen generate --quiet"
+
+[tasks."web:build"]
+description = "エディタ部分（web/）をビルドして web/dist/editor に出す"
+dir = "web"
+run = "npm ci --no-audit --no-fund && npm run build"
+
+[tasks.build]
+description = "dev 版（Memode-dev）をビルドする"
+depends = ["web:build"]
+run = """
+set -o pipefail
+mkdir -p build
+mise run gen
+xcodebuild -project memode.xcodeproj -scheme memode -configuration Debug -derivedDataPath build build > build/xcodebuild.log 2>&1 \
+  || { grep -E 'error:|\\*\\* BUILD' build/xcodebuild.log; exit 1; }
+grep -E '\\*\\* BUILD' build/xcodebuild.log
+"""
+
+[tasks.test]
+description = "ユニットテスト（ダブルタップの判定・隠す決まり・ファイルの読み書き・フォルダの一覧）を回す"
+run = """
+set -o pipefail
+mkdir -p build
+mise run gen
+xcodebuild -project memode.xcodeproj -scheme memode -destination 'platform=macOS' -derivedDataPath build test > build/xcodebuild-test.log 2>&1 \
+  || { grep -E 'error:|failed|\\*\\* TEST' build/xcodebuild-test.log; exit 1; }
+grep -E 'Executed|\\*\\* TEST' build/xcodebuild-test.log | tail -3
+"""
+
+[tasks.stop]
+description = "dev 版を終了する（終了時にセッションを書き終えるまで待つ。終わらなければ kill）"
+run = """
+pgrep -x Memode-dev >/dev/null || exit 0
+osascript -e 'quit app "Memode-dev"' >/dev/null 2>&1 || true
+for i in $(seq 1 40); do pgrep -x Memode-dev >/dev/null || exit 0; sleep 0.2; done
+echo "Memode-dev が終了しないので kill する" >&2
+pkill -x Memode-dev 2>/dev/null || true
+for i in $(seq 1 20); do pgrep -x Memode-dev >/dev/null || exit 0; sleep 0.2; done
+echo "Memode-dev が終了しない" >&2; exit 1
+"""
+
+[tasks.start]
+description = "dev 版をビルドし、動いているものを止めてから起動する"
+depends = ["build"]
+run = """
+mise run stop
+open -g build/Build/Products/Debug/Memode-dev.app --args --show
+"""
+
+[tasks.install-cli]
+description = "memode コマンドを ~/.local/bin に入れる（このリポジトリの scripts/memode へのリンク）"
+run = """
+mkdir -p ~/.local/bin
+ln -sf "$PWD/scripts/memode" ~/.local/bin/memode
+ls -l ~/.local/bin/memode
+"""
+
+[tasks.log]
+description = "dev 版のログを追う"
+run = "tail -f ~/Library/Logs/memode-dev/memode.log"

@@ -1,0 +1,33 @@
+#!/bin/bash
+# memode のポップアップでファイルを開く。
+#   memode <path>...   ファイルを開く（無いパスは新しいファイルとして開き、保存したときに作る。
+#                      ディレクトリは確認してから登録フォルダに入れる）
+#   memode             ポップアップを出す
+#   memode --dev ...   dev 版（Memode-dev）で開く
+# パスは独自の URL スキーム（memode://open?path=...）で渡す。`open -b <bundle id> <path>` は
+# 存在しないパスだとエラーになってアプリまで届かないため。
+set -euo pipefail
+
+scheme=memode
+bundle=local.nyshk97.memode
+if [ "${1:-}" = "--dev" ]; then
+  scheme=memode-dev
+  bundle=local.nyshk97.memode.dev
+  shift
+fi
+
+if [ $# -eq 0 ]; then
+  open -b "$bundle" "${scheme}://show"
+  exit 0
+fi
+
+for p in "$@"; do
+  # 存在しないパスでも動くように realpath は使わない（.. や . はアプリ側で整える）
+  case "$p" in
+    /*) abs="$p" ;;
+    *) abs="$PWD/$p" ;;
+  esac
+  # 空白・日本語・# & ? % を含むパスでも壊れないように encodeURIComponent で包む
+  enc=$(osascript -l JavaScript -e 'function run(argv) { return encodeURIComponent(argv[0]) }' "$abs")
+  open -b "$bundle" "${scheme}://open?path=${enc}"
+done

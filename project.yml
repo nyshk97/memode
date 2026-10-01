@@ -1,0 +1,96 @@
+name: memode
+options:
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    ARCHS: arm64
+    # バージョンはここ 1 箇所で管理する（Info.plist の 2 つのキーはここから流す）
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: "$(MARKETING_VERSION)"
+targets:
+  memode:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+      # エディタ部分（web/ を Vite でビルドしたもの）。mise run build が先に作る
+      - path: web/dist/editor
+        type: folder
+        buildPhase: resources
+    # 署名はハッシュで固定する（リビルドのたびにアクセシビリティの許可が外れないように）。
+    # ハッシュはマシンごとに違うので scripts/gen-signing-xcconfig.sh が書き出す（gitignore）
+    configFiles:
+      Debug: signing-debug.local.xcconfig
+      Release: signing-release.local.xcconfig
+    preBuildScripts:
+      # Xcode のビルドでは node を呼ばない（mise の PATH が通らない）。無ければ止めるだけ
+      - name: Check web build
+        script: |
+          if [ ! -f "$SRCROOT/web/dist/editor/index.html" ]; then
+            echo "error: web/dist/editor が無い。mise run build（web:build を含む）でビルドする"
+            exit 1
+          fi
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        CODE_SIGN_STYLE: Manual
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+      configs:
+        # dev 版と常用版は表示名・bundle id・URL スキームを分ける（同時に動かせる・TCC の許可も別）
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: local.nyshk97.memode.dev
+          PRODUCT_NAME: Memode-dev
+          MEMODE_URL_SCHEME: memode-dev
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: local.nyshk97.memode
+          PRODUCT_NAME: Memode
+          MEMODE_URL_SCHEME: memode
+          ENABLE_HARDENED_RUNTIME: YES
+          OTHER_CODE_SIGN_FLAGS: --timestamp
+          # 素の xcodebuild build が get-task-allow を入れて notarize が Invalid になるのを防ぐ
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: $(PRODUCT_NAME)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        NSPrincipalClass: NSApplication
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER)
+            CFBundleURLSchemes:
+              - $(MEMODE_URL_SCHEME)
+        MemodeURLScheme: $(MEMODE_URL_SCHEME)
+  # 判定のロジックだけを取り込んで試す（アプリを起動しない。dev 版が動いていても回せる）
+  memodeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests
+      - path: App/DoubleTapDetector.swift
+      - path: App/PanelStyle.swift
+      - path: App/FileIO.swift
+      - path: App/FolderIndex.swift
+      - path: App/Log.swift
+      - path: App/AppInfo.swift
+    settings:
+      base:
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: local.nyshk97.memode.tests
+schemes:
+  memode:
+    build:
+      targets:
+        memode: all
+        memodeTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - memodeTests
