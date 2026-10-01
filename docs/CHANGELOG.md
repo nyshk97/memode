@@ -44,6 +44,16 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+### ✨ Added
+- 入力中に ⌃L で mycast を開き、クリップボード履歴から選んだものを memode に貼れるようにした
+
+### 📝 Changed
+- Tab で常に半角スペース 2 つを入れるように変更（ファイルから字下げ幅を推測しない）
+- 最後のタブを閉じたら空の scratch を出すように変更。空の scratch を閉じたときだけウィンドウを隠す
+
+### 🐛 Fixed
+- 日本語の変換中の文字が二重に描かれて滲むのを修正
+
 ## [0.1.5] - 2026-10-01
 
 ### ✨ Added
