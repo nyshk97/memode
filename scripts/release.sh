@@ -178,7 +178,8 @@ cask "$CASK_TOKEN" do
   desc "左 Shift のダブルタップで出し入れするポップアップのメモ・エディタ"
   homepage "https://github.com/$SOURCE_REPO"
 
-  depends_on macos: ">= :sonoma"
+  auto_updates true
+  depends_on macos: :sonoma
 
   app "$APP_NAME.app"
   binary "#{appdir}/$APP_NAME.app/Contents/Resources/memode"
