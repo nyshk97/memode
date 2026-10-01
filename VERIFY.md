@@ -162,6 +162,28 @@ mise run stop
 
 - 枠（タブバー・ステータスバーのあたり）に後ろの色が透け、板（エディタ）の上の文字がはっきり読めれば OK
 
+### 変換中の文字が二重にならないか（ブラウザで代わりに）
+
+変換中は Monaco が IME の入力欄（textarea）を本文の上に重ね、未確定の文字を両方に描く。エディタの背景が透明なので、入力欄が文字を描くと二重になって滲む
+（`style.css` の `.inputarea.ime-input` で入力欄の文字を消している）。日本語入力は自走で打てないので、ビルドした `web/dist/editor` を Chromium で開いて構造だけ確かめる。
+Chromium は EditContext があると textarea を使わない（WKWebView とは別の経路になる）ので、初期スクリプトで消す。
+CDP の `Input.imeSetComposition` は黄色の背景を塗って見比べられないので、変換のイベントを textarea に合成して送る。
+
+```sh
+(cd web/dist/editor && python3 -m http.server 8765 >/dev/null 2>&1 &); echo 'delete window.EditContext;' > /tmp/noec.js
+ab() { agent-browser --session ime "$@"; }
+ab --init-script /tmp/noec.js open "http://localhost:8765/index.html?v=$(date +%s)"; ab wait --fn '!!document.querySelector(".monaco-editor .view-lines")'
+ab eval '(() => { document.querySelector(".monaco-editor textarea").focus(); return document.querySelector(".monaco-editor textarea").className })()'  # inputarea ... なら textarea の経路
+ab keyboard type "abc "
+ab eval '(() => { const ta = document.querySelector(".monaco-editor textarea"), b = ta.value; ta.dispatchEvent(new CompositionEvent("compositionstart", { data: "" })); for (const s of ["に", "にし", "にしむ", "にしむら"]) { ta.value = b + s; ta.setSelectionRange(ta.value.length, ta.value.length); ta.dispatchEvent(new CompositionEvent("compositionupdate", { data: s })); ta.dispatchEvent(new InputEvent("input", { data: s, inputType: "insertCompositionText", isComposing: true })); } return ta.className })()'
+ab eval '(() => { const s = document.createElement("style"); s.textContent = ".monaco-editor .view-lines { opacity: 0 !important }"; document.head.append(s); return 1 })()'  # 本文だけ隠す
+ab screenshot /tmp/memode-ime.png; ab close; pkill -f "http.server 8765"
+```
+
+- 2 つ目の eval が `... ime-input` を返し（変換中の表示になっている）、本文を隠したスクショで「にしむら」が消えてキャレットだけ残れば OK（入力欄が文字を描いていない）。
+  修正前は本文を隠しても入力欄側の文字が残っていた
+- 実際の IME で変換中の下線が出るか・滲まないかは、dev 版で人が確かめる
+
 ## 配布物（公証の手前まで）
 
 ```sh

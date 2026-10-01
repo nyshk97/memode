@@ -211,6 +211,12 @@ body.appear {
 #groups.split .group:not(.active) .editor-host {
   background: var(--sheet-bg-inactive);
 }
+/* 変換中は Monaco が IME の入力欄を本文の上に重ね、未確定の文字を本文と入力欄の両方に描く。下の本文を隠す背景色は
+   エディタの背景（透明）から決まるので透けて二重になり、1px 未満ずれると滲む。入力欄の文字だけ消して本文の 1 枚にする
+   （color は Monaco が入力欄に直接書くので上書きできない。下線と caret は残る） */
+.monaco-editor .inputarea.ime-input {
+  -webkit-text-fill-color: transparent;
+}
 
 /* タブのドラッグ（tabdrag.ts）。掴んだタブの写しがマウスに付いてきて、落とし先に縦線（タブの間）か面（エディタ）を出す */
 .tab-ghost {
