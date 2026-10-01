@@ -104,6 +104,7 @@ targets:
       - path: App/Log.swift
       - path: App/AppInfo.swift
       - path: App/LoginItem.swift
+      - path: App/PanelFrame.swift
     settings:
       base:
         CODE_SIGN_IDENTITY: "-"

@@ -24,6 +24,10 @@
 - `mise run install-cli` で `~/.local/bin/memode` に入れる
 - 終了時は `applicationShouldTerminate` で `.terminateLater` を返し、JS から最後のセッションが届いて書き終わるまで待つ（3 秒で諦める）。
   この待ち合わせは main キューでなく run loop に載せる（終了が main キューのジョブの中から呼ばれると、main キューに積んだものは動かない）
+- ウィンドウの位置と大きさは画面ごとに `<データ>/window.json` に覚える（キーはディスプレイの UUID、値は画面の左下からの位置）。
+  出すときはマウスのある画面で覚えたものを使い、無ければ中央に 80%。メニューバーとメインメニューの「ウィンドウの位置とサイズを元に戻す」で消す。
+  掴んで動かせるのはタブバーのタブの右の空きだけ。JS（`dragregions.ts`）がその矩形を送っておき、Swift の `PopupPanel.sendEvent` が
+  mousedown のときに判定して `performDrag` する（mousedown を JS から回してからでは間に合わない）
 - メニューの操作は Swift の `AppDelegate.perform` を通り、タブと分割に関わるものは `{type: "command"}` として JS に送る
 - `web/src/monaco.generated.ts` は `web/scripts/gen-monaco-entry.mjs` が毎回作る（言語サービスを除いた Monaco の読み込み口。gitignore）
 - アプリのショートカットは `App/MainMenu.swift` のメインメニューに置く（Monaco 側でこれらのキーを使わない）。

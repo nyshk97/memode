@@ -206,6 +206,9 @@ final class SelfTest {
         check("refocus_after_show", (after?["focused"] as? Bool) == true && before != nil && afterCursors == before,
               "focused=\(String(describing: after?["focused"])) before=\(String(describing: before)) after=\(String(describing: afterCursors))")
 
+        // 6b. 掴んで動かせる場所・位置と大きさを覚える・元に戻す
+        await windowFrame()
+
         // 7. タブと左右分割（Phase 4）
         await tabsAndSplit()
 
@@ -654,6 +657,88 @@ final class SelfTest {
         let session = fileText(dataDir.appendingPathComponent("session.json").path) ?? ""
         check("session_written", session.contains("復元テストのメモ") && session.contains("未保存の変更") && !session.contains("c1\\r\\nc2"),
               "bytes=\(session.utf8.count)")
+    }
+
+    /// 掴んで動かせる場所（タブの右の空き）と、画面ごとに位置と大きさを覚える・元に戻す。
+    /// 人が動かした・大きさを変えたのは setFrame で代わりにする（windowDidMove / windowDidResize は同じように届く）
+    private func windowFrame() async {
+        let p = panel.panel
+        let web = panel.webView
+        guard let screen = p.screen, let id = screen.memodeID else {
+            check("frame_screen", false, "screen=\(String(describing: p.screen))")
+            return
+        }
+        func toWindow(_ x: Double, _ y: Double) -> NSPoint {
+            web.convert(NSPoint(x: x, y: web.isFlipped ? y : web.bounds.height - y), to: nil)
+        }
+        await sleep(0.3)
+        let regions = p.dragRegions
+        let tab = (try? await web.evaluateJavaScript(
+            "(() => { const r = document.querySelector('.tab').getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; })()")) as? [Double]
+        // 分割していればタブバーごとに 1 つ。最後のものはウィンドウの右端まで
+        if let r = regions.first, let last = regions.last, let t = tab, t.count == 4 {
+            let empty = p.isDragRegion(toWindow(r.midX, r.midY))
+            let onTab = p.isDragRegion(toWindow(t[0] + t[2] / 2, t[1] + t[3] / 2))
+            let editor = p.isDragRegion(toWindow(r.midX, r.maxY + 40))
+            check("drag_region", abs(last.maxX - web.bounds.width) <= 1 && r.minX >= t[0] + t[2] - 1 && empty && !onTab && !editor,
+                  "regions=\(regions) tab=\(t) width=\(web.bounds.width) empty=\(empty) onTab=\(onTab) editor=\(editor)")
+        } else {
+            check("drag_region", false, "regions=\(regions) tab=\(String(describing: tab))")
+        }
+        // 大きさを変えると、掴める場所も送り直される
+        let before = p.frame
+        p.setFrame(NSRect(x: before.minX, y: before.minY, width: before.width - 200, height: before.height), display: true)
+        await sleep(0.6)
+        let resized = p.dragRegions.last
+        check("drag_region_follows_resize", resized.map { abs($0.maxX - web.bounds.width) <= 1 } ?? false,
+              "region=\(String(describing: resized)) width=\(web.bounds.width)")
+
+        // 動かした・大きさを変えたら覚え、隠して出し直すと同じ場所に出る
+        let store = panel.frameStore
+        let visible = screen.visibleFrame
+        let moved = NSRect(x: visible.minX + 40, y: visible.minY + 60, width: 700, height: 450)
+        p.setFrame(moved, display: true)
+        await sleep(0.6)
+        let fileHasScreen = (try? String(contentsOf: store.fileURL, encoding: .utf8))?.contains(id) == true
+        check("frame_saved", store.frame(for: id) == PanelFrameRules.relative(moved, screenFrame: screen.frame) && fileHasScreen,
+              "saved=\(String(describing: store.frame(for: id))) file=\(fileHasScreen)")
+        panel.hide(reason: .toggle)
+        await sleep(0.3)
+        panel.show()
+        await sleep(0.5)
+        check("frame_restored", p.frame == moved, "frame=\(NSStringFromRect(p.frame)) expected=\(NSStringFromRect(moved)) mouseScreen=\(PanelController.mouseScreen().localizedName)")
+
+        // 動かしてすぐ隠しても覚えている
+        let moved2 = NSRect(x: visible.minX + 80, y: visible.minY + 90, width: 720, height: 460)
+        p.setFrame(moved2, display: true)
+        panel.hide(reason: .toggle)
+        check("frame_saved_on_quick_hide", store.frame(for: id) == PanelFrameRules.relative(moved2, screenFrame: screen.frame),
+              "saved=\(String(describing: store.frame(for: id)))")
+
+        // 覚えた場所が今の画面からはみ出す（解像度を下げた等）: 画面の中に収める
+        store.set(CGRect(x: screen.frame.width - 100, y: -300, width: visible.width + 500, height: 400), for: id)
+        panel.show()
+        await sleep(0.5)
+        check("frame_clamped", visible.contains(p.frame) && p.frame.width == visible.width,
+              "frame=\(NSStringFromRect(p.frame)) visible=\(NSStringFromRect(visible))")
+
+        // 元に戻す（メニューの項目から）: 既定の位置と大きさになり、覚えたものが消える
+        let item = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items)
+            .first { $0.representedObject as? String == MainMenu.Action.resetWindowFrame.rawValue }
+        if let item { app.menuAction(item) }
+        await sleep(0.5)
+        let expected = PanelFrameRules.defaultFrame(visible: visible)
+        check("frame_reset", item != nil && p.frame == expected && store.frame(for: id) == nil,
+              "frame=\(NSStringFromRect(p.frame)) expected=\(NSStringFromRect(expected)) saved=\(String(describing: store.frame(for: id)))")
+        // 隠れているときに元に戻すと、既定の位置で出す（メニューバーのメニューを開くとフォーカスが外れて隠れるため）
+        p.setFrame(moved, display: true)
+        await sleep(0.6)
+        panel.hide(reason: .toggle)
+        await sleep(0.3)
+        panel.resetFrame()
+        await sleep(0.5)
+        check("frame_reset_while_hidden", panel.isVisible && p.frame == expected && store.frame(for: id) == nil,
+              "visible=\(panel.isVisible) frame=\(NSStringFromRect(p.frame))")
     }
 
     /// 前回の --selftest の終わりの状態（メモ・crlf.txt・未保存の変更がある saved.md）が戻っているか
