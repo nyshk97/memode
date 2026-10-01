@@ -52,6 +52,8 @@ export class Workspace {
   onConfirmClose?: (doc: Doc, groupIndex: number) => void;
   /** 最後のタブを閉じたとき（ウィンドウごと隠す。次に出すときは空のメモ 1 枚から） */
   onLastTabClosed?: () => void;
+  /** タブバーを描き直したとき（掴んで動かせる場所を Swift に送り直す） */
+  onRender?: () => void;
 
   constructor(
     private container: HTMLElement,
@@ -448,6 +450,7 @@ export class Workspace {
       g.tabbar.querySelector(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
     this.renderStatus();
+    this.onRender?.();
   }
 
   private renderStatus(): void {

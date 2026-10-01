@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Log.write("app.launch", "version=\(AppInfo.version) pid=\(ProcessInfo.processInfo.processIdentifier) dev=\(AppInfo.isDev)")
 
         NSApp.mainMenu = MainMenu.build(target: self, action: #selector(menuAction(_:)))
-        panelController = PanelController(style: PanelStyle.current)
+        panelController = PanelController(style: PanelStyle.current, frameStore: PanelFrameStore(directory: AppInfo.dataDirectory))
         panelController.bridge.onAction = { [weak self] raw in
             // 最後のタブを閉じた（JS の workspace.ts）。メニューの操作ではないのでここで受ける
             if raw == "hide_panel" {
@@ -115,6 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             documents.quickOpen()
         case .registerFolder:
             documents.chooseFolderToRegister()
+        case .resetWindowFrame:
+            panelController.resetFrame()
         case .checkForUpdates:
             panelController.hide(reason: .checkForUpdates)
             #if !DEBUG
@@ -176,6 +178,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         panelController.toggle()
+    }
+
+    @objc private func resetWindowFrame(_ sender: Any?) {
+        perform(.resetWindowFrame, name: MainMenu.Action.resetWindowFrame.rawValue)
     }
 
     @objc private func selectPanelStyle(_ sender: NSMenuItem) {
@@ -242,6 +248,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let toggle = NSMenuItem(title: "表示 / 隠す（左 Shift を 2 回）", action: #selector(togglePanel(_:)), keyEquivalent: "")
         toggle.target = self
         menu.addItem(toggle)
+        let resetFrame = NSMenuItem(title: "ウィンドウの位置とサイズを元に戻す", action: #selector(resetWindowFrame(_:)), keyEquivalent: "")
+        resetFrame.target = self
+        menu.addItem(resetFrame)
         menu.addItem(.separator())
         let register = NSMenuItem(title: "フォルダを登録…", action: #selector(registerFolderFromMenu(_:)), keyEquivalent: "")
         register.target = self

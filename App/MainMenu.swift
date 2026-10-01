@@ -19,6 +19,8 @@ enum MainMenu {
         case toggleSplit = "toggle_split"
         case chooseLanguage = "choose_language"
         case registerFolder = "register_folder"
+        /// 出ている画面で覚えた位置と大きさを消して、既定に戻す
+        case resetWindowFrame = "reset_window_frame"
         /// ステータスバーの版の表示を押したとき（メニューには置かない）
         case checkForUpdates = "check_for_updates"
     }
@@ -63,6 +65,7 @@ enum MainMenu {
         let view = NSMenu()
         view.addItem(item("左右に分割", .toggleSplit, "\\"))
         view.addItem(item("言語を選ぶ…", .chooseLanguage, ""))
+        view.addItem(item("ウィンドウの位置とサイズを元に戻す", .resetWindowFrame, ""))
         view.addItem(.separator())
         view.addItem(item("次のタブ", .nextTab, "\t", .control))
         view.addItem(item("前のタブ", .previousTab, "\t", [.control, .shift]))

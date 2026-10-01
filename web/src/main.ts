@@ -5,6 +5,7 @@ import { allLanguages } from "./languages";
 import { quickPickDebug, showQuickPick } from "./quickpick";
 import { Workspace } from "./workspace";
 import { FileController } from "./files";
+import { DragRegions } from "./dragregions";
 import "./style.css";
 
 // 言語サービス（TS・JSON 等）は入れていないので、worker はエディタ本体の 1 種類だけ。
@@ -45,6 +46,9 @@ const workspace = new Workspace(
 
 const files = new FileController(workspace);
 workspace.onLastTabClosed = () => post({ type: "action", action: "hide_panel" });
+const dragRegions = new DragRegions(document.getElementById("groups")!);
+workspace.onRender = () => dragRegions.update();
+dragRegions.update();
 
 // ステータスバーの右端の版。押すとアップデートを確認する（dev 版は Sparkle が無いので押せない）
 const statusVersion = document.getElementById("status-version")!;

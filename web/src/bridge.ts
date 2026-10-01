@@ -18,6 +18,8 @@ export type ToSwift =
   /** メニューのキーに届かないショートカット（Ctrl+Tab）を Swift のメニュー操作に回す。
    *  hide_panel はメニューに無い操作で、最後のタブを閉じたときにウィンドウを隠す */
   | { type: "action"; action: string }
+  /** 掴んでウィンドウを動かせる場所（タブバーの空き）。ページの左上からの位置 */
+  | { type: "dragRegions"; rects: { x: number; y: number; width: number; height: number }[] }
   /** 保存・セッション・ファイルまわり（Swift の DocumentService が受ける） */
   | { type: "session" | "sessionSkipped" | "openPaths" | "quickOpenResend" | "save" | "confirmClose" | "fileStates" | "askConflict"; [key: string]: unknown };
 

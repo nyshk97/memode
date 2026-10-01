@@ -44,6 +44,8 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
     private(set) var isReady = false
     /// JS から回ってきたメニュー操作（Ctrl+Tab）
     var onAction: ((String) -> Void)?
+    /// 掴んで動かせる場所（タブバーの空き。PopupPanel.dragRegions）
+    var onDragRegions: (([CGRect]) -> Void)?
     /// それ以外の要求（保存・セッション等。DocumentService が受ける）
     var onMessage: ((String, [String: Any]) -> Void)?
     private var pending: [[String: Any]] = []
@@ -92,6 +94,12 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
             waiters.forEach { $0() }
         case "action":
             if let action = body["action"] as? String { onAction?(action) }
+        case "dragRegions":
+            let rects = (body["rects"] as? [[String: Double]] ?? []).compactMap { r -> CGRect? in
+                guard let x = r["x"], let y = r["y"], let w = r["width"], let h = r["height"] else { return nil }
+                return CGRect(x: x, y: y, width: w, height: h)
+            }
+            onDragRegions?(rects)
         case "log":
             Log.write("js.\(body["event"] as? String ?? "?")", body["detail"] as? String ?? "")
         default:
