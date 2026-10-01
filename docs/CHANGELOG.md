@@ -44,6 +44,12 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+### ✨ Added
+- メニューバーのメニューに「データのフォルダを開く」を追加
+
+### 📝 Changed
+- セッションと最近使ったファイルの置き場所を `~/Memode Data` から `~/Library/Application Support/Memode` に変更（起動時に自動で移す）
+
 ## [0.1.1] - 2026-10-01
 
 ### 📝 Changed

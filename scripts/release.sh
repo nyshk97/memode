@@ -185,7 +185,7 @@ cask "$CASK_TOKEN" do
 
   uninstall quit: "$BUNDLE_ID"
 
-  # メモ（~/Memode Data）は消さない
+  # メモ（~/Library/Application Support/Memode）は消さない
   zap trash: [
     "~/Library/Logs/memode",
     "~/Library/Preferences/$BUNDLE_ID.plist",

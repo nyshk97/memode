@@ -36,6 +36,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let action = MainMenu.Action(rawValue: raw) else { return }
             self?.perform(action, name: raw)
         }
+        if AppInfo.dataDirOverride == nil {
+            let result = AppInfo.migrateLegacyData(from: AppInfo.legacyDataDirectory, to: AppInfo.dataDirectory)
+            if result != .nothingToMove {
+                Log.write("app.data_migrate", "\(result) \(AppInfo.legacyDataDirectory.path) -> \(AppInfo.dataDirectory.path)")
+            }
+        }
         documents = DocumentService(panel: panelController, store: SessionStore(directory: AppInfo.dataDirectory))
         panelController.bridge.onMessage = { [weak self] type, body in self?.documents.handle(type, body) }
         panelController.onShow = { [weak self] in self?.panelController.bridge.send(["type": "checkFiles"]) }
@@ -155,6 +161,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         documents.unregisterFolder(folder)
     }
 
+    @objc private func openDataFolder(_ sender: Any?) {
+        try? FileManager.default.createDirectory(at: AppInfo.dataDirectory, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(AppInfo.dataDirectory)
+    }
+
     @objc private func openAccessibilitySettings(_ sender: Any?) {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
@@ -204,6 +215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let folders = NSMenuItem(title: "登録フォルダ（\(documents.folders.count)）", action: nil, keyEquivalent: "")
         folders.submenu = folderMenu
         menu.addItem(folders)
+        let dataFolder = NSMenuItem(title: "データのフォルダを開く", action: #selector(openDataFolder(_:)), keyEquivalent: "")
+        dataFolder.target = self
+        menu.addItem(dataFolder)
         if !AXIsProcessTrusted() {
             let warn = NSMenuItem(title: "⚠︎ アクセシビリティの許可が必要（左 Shift が効かない）", action: #selector(openAccessibilitySettings(_:)), keyEquivalent: "")
             warn.target = self

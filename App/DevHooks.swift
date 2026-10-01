@@ -16,7 +16,7 @@ enum DevHooks {
         let args = CommandLine.arguments
         let selftest = args.contains("--selftest") || args.contains("--selftest-restore")
         if selftest && (!args.contains("--data-dir") || !args.contains("--index-home")) {
-            // 自走の検証はタブを作ったり閉じたりするので、手元の dev 版のメモ（~/Memode-dev）で回さない。
+            // 自走の検証はタブを作ったり閉じたりするので、手元の dev 版のメモ（~/Library/Application Support/Memode-dev）で回さない。
             // Cmd+P の一覧も本物のホームを走査しない（時間がかかり、許可のダイアログも出る）
             Log.write("selftest.refused", "--data-dir と --index-home に使い捨てのディレクトリを付けて起動する")
             NSApp.terminate(nil)

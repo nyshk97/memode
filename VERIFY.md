@@ -7,7 +7,7 @@
 クリップボードは途中で使うが、最後に元へ戻す（中身はログに出さない）。
 
 **`--data-dir` と `--index-home` に使い捨てのディレクトリが必須**（付けないと `selftest.refused` で終わる）。タブを作ったり閉じたり
-保存したりするので、手元の dev 版のメモ（`~/Memode-dev`）では回さない。Cmd+P の一覧も本物のホームを走査しない（時間がかかり、許可のダイアログも出る）。
+保存したりするので、手元の dev 版のメモ（`~/Library/Application Support/Memode-dev`）では回さない。Cmd+P の一覧も本物のホームを走査しない（時間がかかり、許可のダイアログも出る）。
 
 ```sh
 mise run build
@@ -61,6 +61,21 @@ grep -E 'folder\.indexed' ~/Library/Logs/memode-dev/memode.log
 ```
 
 `ms` が何十秒にもなっていたら、許可のダイアログ（`~/Documents`・Dropbox 等）が返事待ちで止まっていないかを見る（2026-10-01 に 133 秒になった）。
+
+## 古いデータの置き場からの移行
+
+`--data-dir` を付けずに起動したときだけ、`~/Memode-dev`（常用版は `~/Memode Data`）を `~/Library/Application Support/Memode-dev`（`Memode`）へ移す。
+移す処理そのものはユニットテスト（`DataMigrationTests`）で見ている。実際のアプリで通すときは、古い置き場を作って 2 回起動する。
+
+```sh
+N="$HOME/Library/Application Support/Memode-dev"; L=~/Library/Logs/memode-dev/memode.log
+mise run stop; [ -e "$N" ] && mv "$N" ~/Memode-dev   # 既に移っていたら古い置き場に戻す（中身はそのまま）
+for run in 1 2; do mise run stop >/dev/null; : > "$L"; open -g build/Build/Products/Debug/Memode-dev.app
+  for i in $(seq 1 30); do grep -q app.data_dir "$L" && break; sleep 0.5; done
+  echo "== $run"; grep -E 'app\.data_(migrate|dir)|session\.loaded' "$L"; done; mise run stop
+```
+
+1 回目に `app.data_migrate moved ...` と `session.loaded docs=N`（移す前と同じ数）、2 回目は `app.data_migrate` が出ずに同じ置き場を読めば通っている。
 
 ## memode コマンド
 

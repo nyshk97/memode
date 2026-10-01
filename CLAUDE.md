@@ -37,7 +37,9 @@
 | bundle id | local.nyshk97.memode.dev | local.nyshk97.memode |
 | URL スキーム | memode-dev:// | memode:// |
 | ログ | ~/Library/Logs/memode-dev/memode.log | ~/Library/Logs/memode/memode.log |
-| データ | ~/Memode-dev/ | ~/Memode Data/（~/Memode はリポジトリ ~/memode とぶつかる） |
+| データ | ~/Library/Application Support/Memode-dev/ | ~/Library/Application Support/Memode/ |
+
+データは v0.1.1 まで `~/Memode-dev`・`~/Memode Data` に置いていた。起動時に新しい置き場が無ければフォルダごと移す（`AppInfo.migrateLegacyData`）
 
 ## ビルドと起動
 
