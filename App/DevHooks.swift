@@ -117,6 +117,7 @@ final class SelfTest {
         let hl = await panel.bridge.debugState()
         check("syntax_highlight", (hl?["tokenClassCount"] as? Int ?? 0) >= 3, "tokenClassCount=\(hl?["tokenClassCount"] ?? "nil")")
         check("worker_loaded", (hl?["workerLoaded"] as? Bool) == true, "workerLoaded=\(hl?["workerLoaded"] ?? "nil")")
+        await checkLanguages()
 
         // 1. Cmd+Opt+↓ でカーソルが増える／Esc で戻る
         panel.bridge.send(["type": "setContent", "value": "aaa\nbbb\nccc"])
@@ -293,6 +294,42 @@ final class SelfTest {
     }
 
     // MARK: - Phase 4
+
+    /// ファイルの名前・shebang から言語が決まる／Monaco に無かった言語（JSON・ignore・diff）と TOML の代わりの ini にも色が付く
+    private func checkLanguages() async {
+        let cases: [(path: String, content: String, expected: String)] = [
+            ("/p/package.json", "", "json"), ("/p/log.jsonl", "", "json"), ("/p/config.json.sample", "", "json"),
+            ("/p/Package.resolved", "", "json"), ("/p/.mise.toml", "", "ini"), ("/p/.gitignore", "", "ignore"),
+            ("/h/.config/git/ignore", "", "ignore"), ("/p/fix.patch", "", "diff"), ("/h/.zshrc", "", "shell"),
+            ("/p/.env.local", "", "shell"), ("/p/prod-api.env", "", "shell"), ("/p/Dockerfile.dev", "", "dockerfile"),
+            ("/p/Brewfile", "", "ruby"), ("/p/config.ru", "", "ruby"), ("/p/Info.plist", "", "xml"), ("/p/rule.mdc", "", "markdown"), ("/p/App.vue", "", "html"), ("/p/Page.svelte", "", "html"),
+            ("/p/AboutPanel.mm", "", "objective-c"), ("/p/bin/rails", "#!/usr/bin/env ruby\nputs 1", "ruby"),
+            ("/p/bin/run", "#!/usr/bin/env -S node --no-warnings\n", "javascript"), ("/p/bin/setup", "#!/bin/bash\n", "shell"),
+            ("/p/bin/tool", "#!/usr/bin/python3.12\n", "python"), ("/p/LICENSE", "MIT", "plaintext"),
+            ("/p/a.ts", "", "typescript"), ("/p/Gemfile", "", "ruby"), ("/h/.ssh/config", "", "ini"),
+        ]
+        var wrong: [String] = []
+        for c in cases {
+            let got = try? await panel.webView.callAsyncJavaScript(
+                "return window.memode.detectLanguage(path, content)", arguments: ["path": c.path, "content": c.content], contentWorld: .page)
+            if got as? String != c.expected { wrong.append("\(c.path)=\(got ?? "nil")(want \(c.expected))") }
+        }
+        check("language_detect", wrong.isEmpty, "cases=\(cases.count) wrong=\(wrong)")
+
+        let samples: [(language: String, value: String)] = [
+            ("json", "{\n  \"name\": \"memode\",\n  \"private\": true,\n  \"n\": 1\n}"),
+            ("ini", "[tools]\nnode = \"22\" # コメント\n"),
+            ("ignore", "# コメント\n!keep.txt\n*.log\nbuild/\n"),
+            ("diff", "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"),
+        ]
+        for s in samples {
+            panel.bridge.send(["type": "setContent", "value": s.value, "language": s.language])
+            await sleep(0.4)
+            let state = await panel.bridge.debugState()
+            let count = state?["tokenClassCount"] as? Int ?? 0
+            check("syntax_highlight_\(s.language)", count >= 3, "tokenClassCount=\(count)")
+        }
+    }
 
     private func workspace() async -> (groups: [[String: Any]], activeGroup: Int, docCount: Int, value: String) {
         let state = await panel.bridge.debugState()

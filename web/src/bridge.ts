@@ -50,6 +50,8 @@ export interface EditorHost {
   setAppInfo(info: Extract<FromSwift, { type: "appInfo" }>): void;
   handleFileMessage(msg: Extract<FromSwift, { [key: string]: unknown }>): void;
   debugState(): DebugState;
+  /** ファイルの名前と中身から決まる言語（dev 版の自走の検証用） */
+  detectLanguage(path: string, content?: string): string;
 }
 
 declare global {
@@ -58,6 +60,7 @@ declare global {
     memode: {
       receive(msg: FromSwift): void;
       debugState(): DebugState;
+      detectLanguage(path: string, content?: string): string;
     };
   }
 }
@@ -90,6 +93,7 @@ export function install(host: EditorHost): void {
       }
     },
     debugState: () => host.debugState(),
+    detectLanguage: (path, content) => host.detectLanguage(path, content),
   };
   // Ctrl+Tab は macOS のメニューのキーとしては届かないので、ここで拾って Swift に回す
   window.addEventListener(

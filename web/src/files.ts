@@ -1,5 +1,4 @@
 import { post } from "./bridge";
-import { languageForPath } from "./languages";
 import type { DiskSnapshot, FileBase, Session } from "./session";
 import { showQuickPick, type PickItem } from "./quickpick";
 import type { Doc, Workspace } from "./workspace";
@@ -113,13 +112,13 @@ export class FileController {
         return;
       }
       case "openFile":
-        ws.openFile(msg.path as string, msg.disk as DiskSnapshot, languageForPath);
+        ws.openFile(msg.path as string, msg.disk as DiskSnapshot);
         return;
       case "flushSession":
         return this.postSession(msg.flushId as number | undefined);
       case "saved": {
         if (!doc) return;
-        ws.markSaved(doc, msg.path as string, msg.version as number, msg.base as FileBase, msg.bom as boolean, languageForPath);
+        ws.markSaved(doc, msg.path as string, msg.version as number, msg.base as FileBase, msg.bom as boolean);
         const group = this.closeAfterSave.get(doc.id);
         this.closeAfterSave.delete(doc.id);
         if (group !== undefined) ws.closeTab(group, doc.id, true);

@@ -1,7 +1,8 @@
 import * as monaco from "./monaco.generated";
 import EditorWorker from "../node_modules/monaco-editor/esm/vs/editor/editor.worker.js?worker";
 import { install, post, type EditorHost } from "./bridge";
-import { allLanguages } from "./languages";
+import { allLanguages, languageForPath } from "./languages";
+import { themes } from "./languagedefs";
 import { quickPickDebug, showQuickPick } from "./quickpick";
 import { Workspace } from "./workspace";
 import { FileController } from "./files";
@@ -21,7 +22,7 @@ self.MonacoEnvironment = {
 };
 
 const dark = window.matchMedia("(prefers-color-scheme: dark)");
-const applyTheme = () => monaco.editor.setTheme(dark.matches ? "vs-dark" : "vs");
+const applyTheme = () => monaco.editor.setTheme(dark.matches ? themes.dark : themes.light);
 applyTheme();
 dark.addEventListener("change", applyTheme);
 
@@ -101,6 +102,7 @@ const host: EditorHost = {
     statusVersion.classList.toggle("update", !dev && !!update);
   },
   handleFileMessage: (msg) => files.handle(msg),
+  detectLanguage: (path, content) => languageForPath(path, content),
   debugState() {
     const editor = workspace.activeEditor;
     const selections = editor.getSelections() ?? [];

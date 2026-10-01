@@ -1,5 +1,5 @@
 import * as monaco from "./monaco.generated";
-import { languageName } from "./languages";
+import { languageForPath, languageName } from "./languages";
 import type { DiskSnapshot, FileBase, Session, SessionDoc } from "./session";
 
 // タブ（文書）と、左右の分割（グループ）。
@@ -257,13 +257,13 @@ export class Workspace {
   // MARK: - 保存・ファイル
 
   /** 保存できたとき。メモだったものはファイルのタブになる（言語が plaintext なら拡張子から決める） */
-  markSaved(doc: Doc, path: string, version: number, base: FileBase, bom: boolean, languageForPath: (p: string) => string): void {
+  markSaved(doc: Doc, path: string, version: number, base: FileBase, bom: boolean): void {
     doc.path = path;
     doc.savedVersion = version;
     doc.base = base;
     doc.bom = bom;
     if (doc.model.getLanguageId() === "plaintext") {
-      const lang = languageForPath(path);
+      const lang = languageForPath(path, doc.model.getLineContent(1));
       if (lang !== "plaintext") monaco.editor.setModelLanguage(doc.model, lang);
     }
     this.render();
@@ -282,7 +282,7 @@ export class Workspace {
 
   /** ファイルをタブで開く。すでに開いていればそのタブにする（未保存の変更が無ければディスクの中身で読み直す）。
    *  いま見ているのが空のメモなら、そのタブを置き換える */
-  openFile(path: string, disk: DiskSnapshot, languageForPath: (p: string) => string): void {
+  openFile(path: string, disk: DiskSnapshot): void {
     const g = this.groups[this.activeGroup];
     const existing = this.allDocs.find((d) => d.path === path);
     if (existing) {
@@ -291,7 +291,7 @@ export class Workspace {
       this.showDoc(g, existing.id);
       return this.afterChange();
     }
-    const doc = this.createDoc(disk.content, languageForPath(path));
+    const doc = this.createDoc(disk.content, languageForPath(path, disk.content));
     doc.path = path;
     doc.base = disk.base;
     doc.bom = disk.bom;
@@ -362,7 +362,9 @@ export class Workspace {
         }
         content = sd.disk.content;
       }
-      const doc = this.createDoc(content ?? "", sd.language, { id: sd.id, untitledIndex: sd.untitledIndex });
+      // 色付けできる言語が増えたときのために、plaintext のファイルだけは名前から決め直す
+      const language = sd.path && sd.language === "plaintext" ? languageForPath(sd.path, content) : sd.language;
+      const doc = this.createDoc(content ?? "", language, { id: sd.id, untitledIndex: sd.untitledIndex });
       doc.path = sd.path;
       if (sd.path && !sd.dirty) {
         doc.base = sd.disk!.base;

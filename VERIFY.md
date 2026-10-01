@@ -19,7 +19,7 @@ grep -E 'NG|selftest.done|app.terminate|flush_timeout|js\.' "$L"
 
 - `selftest.done ... ng=0` と `app.terminate flushed`（終了時に最後のセッションを書き終えてから終わった）が出れば通っている
 
-- 確かめている項目: シンタックスハイライト・worker が動く・Cmd+Opt+↓ でカーソルが増える・Esc で戻る・Opt+↓ で行が動く・
+- 確かめている項目: シンタックスハイライト・worker が動く・言語の判定（拡張子・ファイル名・shebang）と JSON・TOML（ini）・ignore・diff の色付け・Cmd+Opt+↓ でカーソルが増える・Esc で戻る・Opt+↓ で行が動く・
   Cmd+N/P/S/Shift+S/W/1・Ctrl+Tab・Cmd+\ がメニューに届く・Cmd+A/C/X/V・Cmd+O のファイル選択画面がポップアップより前に出る・
   閉じた後にポップアップがキーを取り戻す・隠して出し直したときにフォーカスとカーソル位置が戻る
   タブと分割（1 行目の見出し・Cmd+N・Cmd+1・Ctrl+Tab・分割で同じ文書が開く・分割を戻してもタブが残る・言語の選択・最後のタブを閉じるとウィンドウが隠れて空のメモが 1 枚残る）・
