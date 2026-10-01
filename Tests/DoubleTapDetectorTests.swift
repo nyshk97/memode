@@ -89,3 +89,72 @@ final class HideRulesTests: XCTestCase {
         XCTAssertFalse(HideRules.shouldRestorePreviousApp(reason: .lastTabClosed, style: .nonactivating))
     }
 }
+
+final class LendRulesTests: XCTestCase {
+    private func resign(launcher: Bool = false, front: LendRules.Front, waited: Bool = false, ours: Bool = false) -> LendRules.ResignDecision {
+        LendRules.onResignKey(keyWindowIsOurs: ours, hasAttachedSheet: false, appIsModal: false,
+                              launcherPanelVisible: launcher, front: front, waited: waited)
+    }
+
+    func testLendsWhenLauncherTakesKey() {
+        XCTAssertEqual(resign(front: .launcher), .lend)
+        // Secure Event Input 中は前面が変わらないので、mycast のパネルが出ているかで決める
+        XCTAssertEqual(resign(launcher: true, front: .home), .lend)
+    }
+
+    func testHidesForOtherAppAndWaitsOnceForHome() {
+        XCTAssertEqual(resign(front: .other), .hide)
+        // 前面の切り替わりが遅れて届くことがあるので、元のアプリのままなら一度だけ待つ
+        XCTAssertEqual(resign(front: .home), .wait)
+        XCTAssertEqual(resign(front: .home, waited: true), .hide)
+        XCTAssertEqual(resign(front: .own), .wait)
+    }
+
+    func testOwnDialogsStillKeep() {
+        XCTAssertEqual(resign(launcher: true, front: .launcher, ours: true), .keep)
+        XCTAssertEqual(resign(front: .other, ours: true), .keep)
+    }
+
+    func testDoesNotRememberLauncherAsHome() {
+        // mycast が前面のまま出し直しても（元のアプリの前面化が遅れた）、控えた元のアプリは上書きしない
+        XCTAssertFalse(LendRules.shouldRememberFront(isOwn: false, isLauncher: true))
+        XCTAssertFalse(LendRules.shouldRememberFront(isOwn: true, isLauncher: false))
+        XCTAssertTrue(LendRules.shouldRememberFront(isOwn: false, isLauncher: false))
+    }
+
+    func testWhileLentOnlyOtherAppsHide() {
+        // mycast が前面のときに貸しても、mycast が閉じて元のアプリが前面に戻ったときは隠さない
+        XCTAssertFalse(LendRules.shouldHideOnActivate(.home))
+        XCTAssertFalse(LendRules.shouldHideOnActivate(.launcher))
+        XCTAssertFalse(LendRules.shouldHideOnActivate(.own))
+        XCTAssertTrue(LendRules.shouldHideOnActivate(.other))
+    }
+
+    func testTimeoutStartsWhenLauncherPanelDisappears() {
+        let t0 = Date(timeIntervalSince1970: 1000)
+        var r = LendRules.tick(launcherPanelVisible: true, goneAt: nil, now: t0)
+        XCTAssertNil(r.goneAt)
+        XCTAssertFalse(r.hide)
+        r = LendRules.tick(launcherPanelVisible: false, goneAt: nil, now: t0.addingTimeInterval(10))
+        XCTAssertEqual(r.goneAt, t0.addingTimeInterval(10))
+        XCTAssertFalse(r.hide)
+        r = LendRules.tick(launcherPanelVisible: false, goneAt: r.goneAt, now: t0.addingTimeInterval(12.4))
+        XCTAssertFalse(r.hide)
+        r = LendRules.tick(launcherPanelVisible: false, goneAt: r.goneAt, now: t0.addingTimeInterval(12.5))
+        XCTAssertTrue(r.hide)
+        // また出たら（⌃L をもう一度押した）数え直す
+        r = LendRules.tick(launcherPanelVisible: true, goneAt: t0, now: t0.addingTimeInterval(20))
+        XCTAssertNil(r.goneAt)
+        XCTAssertFalse(r.hide)
+    }
+
+    func testLauncherPanelExcludesMenuBarItemAndToast() {
+        let panel = ScreenWindow(bundleID: "io.github.nyshk97.mycast", layer: 3, size: CGSize(width: 680, height: 60))
+        XCTAssertTrue(LendRules.isLauncherPanel(panel))
+        XCTAssertTrue(LendRules.isLauncherPanel(ScreenWindow(bundleID: "io.github.nyshk97.mycast.dev", layer: 3, size: panel.size)))
+        XCTAssertFalse(LendRules.isLauncherPanel(ScreenWindow(bundleID: "io.github.nyshk97.mycast", layer: 25, size: CGSize(width: 30, height: 24))))
+        XCTAssertFalse(LendRules.isLauncherPanel(ScreenWindow(bundleID: "io.github.nyshk97.mycast", layer: 25, size: panel.size)))
+        XCTAssertFalse(LendRules.isLauncherPanel(ScreenWindow(bundleID: "io.github.nyshk97.mycast", layer: 3, size: CGSize(width: 20, height: 20))))
+        XCTAssertFalse(LendRules.isLauncherPanel(ScreenWindow(bundleID: "com.example.other", layer: 3, size: panel.size)))
+    }
+}

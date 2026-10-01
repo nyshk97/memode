@@ -64,6 +64,14 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
         if isReady { body() } else { readyWaiters.append(body) }
     }
 
+    /// エディタに文字を打てる状態か（debugState は中身を丸ごと作るので、常用版の経路では使わない）
+    func editorFocused() async -> Bool {
+        guard let webView else { return false }
+        let result = try? await webView.callAsyncJavaScript(
+            "return window.memode.editorFocused()", arguments: [:], contentWorld: .page)
+        return result as? Bool == true
+    }
+
     /// JS 側の状態を読む（dev 版の自走の検証用）
     func debugState() async -> [String: Any]? {
         guard let webView else { return nil }

@@ -36,13 +36,21 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { panel.isVisible }
     /// 出す直前に前面にいたアプリ（activating のとき、ダブルタップで隠したらここへ戻す）
-    private var previousApp: NSRunningApplication?
+    private(set) var previousApp: NSRunningApplication?
     /// フォーカスが外れて隠した時刻（メニューバーの「表示 / 隠す」を押したとき、その操作で
     /// フォーカスが外れて隠れた直後にまた出してしまわないように使う）
     private(set) var lastFocusLostHideAt: Date?
     /// 出したとき（開いているファイルが外で書き換わったかを確かめる）・隠したとき（セッションをすぐ保存する）
     var onShow: (() -> Void)?
     var onHide: (() -> Void)?
+    /// mycast（クリップボード履歴を持つランチャー）か。dev 版の自走の検証で差し替える
+    var isLauncher: (String?) -> Bool = LendRules.isLauncher
+    /// mycast にキー入力を貸しているか
+    var isLent: Bool { lendTimer != nil }
+    /// 貸している間、mycast のパネルを見張る（他のアプリのウィンドウが閉じたことを知らせる通知は無い）
+    private var lendTimer: Timer?
+    /// mycast のパネルが画面から消えた時刻
+    private var launcherGoneAt: Date?
     /// 画面ごとに覚えた位置とサイズ
     let frameStore: PanelFrameStore
     /// 最後にこちらで置いた位置と大きさ。これと違っていたら、人が動かした・大きさを変えたとみなして覚える
@@ -62,6 +70,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView = backdrop
         panel.delegate = self
         bridge.onDragRegions = { [weak self] rects in self?.panel.dragRegions = rects }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            self?.appDidActivate(note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)
+        }
     }
 
     private static func makePanel(style: PanelStyle) -> PopupPanel {
@@ -122,7 +135,10 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func show() {
         let front = NSWorkspace.shared.frontmostApplication
-        previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? previousApp : front
+        if LendRules.shouldRememberFront(isOwn: front?.processIdentifier == ProcessInfo.processInfo.processIdentifier,
+                                         isLauncher: isLauncher(front?.bundleIdentifier)) {
+            previousApp = front
+        }
         // 出ているときは動かさない（別の画面にマウスがあっても、今の場所のまま前に出すだけ）
         let wasHidden = !panel.isVisible
         if wasHidden {
@@ -148,6 +164,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     func hide(reason: HideReason) {
         guard isVisible else { return }
+        if isLent { endLend(reason: reason.rawValue) }
         // 動かしてすぐ隠したときも覚える
         if let work = pendingFrameSave, !work.isCancelled {
             work.cancel()
@@ -171,20 +188,127 @@ final class PanelController: NSObject, NSWindowDelegate {
         bridge.send(["type": "focus"])
     }
 
+    // MARK: - mycast に貸す
+
+    /// mycast から返ってきた（`memode://focus`・`memode://paste`）。key を取り直し、paste ならペーストボードの中身をエディタに貼る。
+    /// 隠れていたら出すだけ（URL はブラウザのリンクからも叩けるので、勝手に中身を入れない）
+    func takeBack(paste: Bool) {
+        let wasVisible = isVisible
+        // key にすると windowDidBecomeKey で抜けてしまうので、その前に理由を付けて抜けておく
+        if isLent { endLend(reason: paste ? "paste" : "focus") }
+        show()
+        guard paste else { return }
+        guard wasVisible else {
+            Log.write("panel.paste_skipped", "hidden")
+            return
+        }
+        Task { @MainActor in
+            // show() は JS に focus を投げるだけなので、エディタにフォーカスが戻ってから貼る
+            var focused = false
+            for _ in 0..<20 {
+                let editorFocused = await bridge.editorFocused()
+                focused = panel.isKeyWindow && editorFocused
+                if focused { break }
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+            // 待っている間に隠れた・key を取られたときは送らない（送っても届かない）
+            guard isVisible, panel.isKeyWindow else {
+                Log.write("panel.paste_skipped", "not_key focused=\(focused)")
+                return
+            }
+            let sent = NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil)
+            Log.write("panel.paste", "focused=\(focused) sent=\(sent)")
+        }
+    }
+
+    /// パネルが key を失ったときに決める（隠す・貸す・待つ）
+    private func decideOnResignKey(waited: Bool) {
+        guard isVisible, !panel.isKeyWindow, !isLent else { return }
+        let keyWindow = NSApp.keyWindow
+        let decision = LendRules.onResignKey(
+            keyWindowIsOurs: keyWindow != nil,
+            hasAttachedSheet: panel.attachedSheet != nil,
+            appIsModal: NSApp.modalWindow != nil,
+            launcherPanelVisible: launcherPanelVisible(),
+            front: front(NSWorkspace.shared.frontmostApplication),
+            waited: waited)
+        Log.write("panel.resign_key", "decision=\(decision.rawValue) keyWindow=\(keyWindow.map { String(describing: type(of: $0)) } ?? "none") front=\(NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "-")")
+        switch decision {
+        case .keep:
+            break
+        case .hide:
+            hide(reason: .focusLost)
+        case .lend:
+            startLend()
+        case .wait:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.decideOnResignKey(waited: true) }
+        }
+    }
+
+    private func startLend() {
+        launcherGoneAt = nil
+        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in self?.lendTick() }
+        RunLoop.main.add(timer, forMode: .common)
+        lendTimer = timer
+        Log.write("panel.lend", "home=\(previousApp?.bundleIdentifier ?? "-")")
+    }
+
+    private func endLend(reason: String) {
+        lendTimer?.invalidate()
+        lendTimer = nil
+        launcherGoneAt = nil
+        Log.write("panel.lend_end", "reason=\(reason)")
+    }
+
+    private func lendTick() {
+        guard isLent else { return }
+        let result = LendRules.tick(launcherPanelVisible: launcherPanelVisible(), goneAt: launcherGoneAt, now: Date())
+        launcherGoneAt = result.goneAt
+        if result.hide {
+            endLend(reason: "timeout")
+            hide(reason: .focusLost)
+        }
+    }
+
+    private func appDidActivate(_ app: NSRunningApplication?) {
+        guard isLent, LendRules.shouldHideOnActivate(front(app)) else { return }
+        endLend(reason: "other_app:\(app?.bundleIdentifier ?? "-")")
+        hide(reason: .focusLost)
+    }
+
+    private func front(_ app: NSRunningApplication?) -> LendRules.Front {
+        guard let app else { return .home }
+        if app.processIdentifier == ProcessInfo.processInfo.processIdentifier { return .own }
+        if isLauncher(app.bundleIdentifier) { return .launcher }
+        if app.processIdentifier == previousApp?.processIdentifier { return .home }
+        return .other
+    }
+
+    private func launcherPanelVisible() -> Bool {
+        guard let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return false }
+        var bundleIDs: [pid_t: String?] = [:]
+        return list.contains { info in
+            guard let pid = info[kCGWindowOwnerPID as String] as? pid_t,
+                  let bounds = (info[kCGWindowBounds as String] as? NSDictionary).flatMap({ CGRect(dictionaryRepresentation: $0) }) else { return false }
+            let layer = info[kCGWindowLayer as String] as? Int ?? 0
+            // レイヤーで外せるものは、アプリを引く前に外す
+            guard layer == LendRules.floatingLayer else { return false }
+            let id = bundleIDs[pid] ?? NSRunningApplication(processIdentifier: pid)?.bundleIdentifier
+            bundleIDs[pid] = id
+            return LendRules.isLauncherPanel(ScreenWindow(bundleID: id, layer: layer, size: bounds.size), isLauncher: isLauncher)
+        }
+    }
+
     // MARK: - NSWindowDelegate
 
     func windowDidResignKey(_ notification: Notification) {
         // キーの移り先が決まるのを待ってから判断する
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.isVisible, !self.panel.isKeyWindow else { return }
-            let keyWindow = NSApp.keyWindow
-            let hide = HideRules.shouldHideOnResignKey(
-                keyWindowIsOurs: keyWindow != nil,
-                hasAttachedSheet: self.panel.attachedSheet != nil,
-                appIsModal: NSApp.modalWindow != nil)
-            Log.write("panel.resign_key", "hide=\(hide) keyWindow=\(keyWindow.map { String(describing: type(of: $0)) } ?? "none")")
-            if hide { self.hide(reason: .focusLost) }
-        }
+        DispatchQueue.main.async { [weak self] in self?.decideOnResignKey(waited: false) }
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        // mycast が開いたままパネルをクリックした等。mycast からは何も返ってこない
+        if isLent { endLend(reason: "key") }
     }
 
     func windowDidMove(_ notification: Notification) {

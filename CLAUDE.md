@@ -35,6 +35,12 @@
   出すときはマウスのある画面で覚えたものを使い、無ければ中央に 80%。メニューバーとメインメニューの「ウィンドウの位置とサイズを元に戻す」で消す。
   掴んで動かせるのはタブバーのタブの右の空きだけ。JS（`dragregions.ts`）がその矩形を送っておき、Swift の `PopupPanel.sendEvent` が
   mousedown のときに判定して `performDrag` する（mousedown を JS から回してからでは間に合わない）
+- mycast（`~/mycast`。⌃L のランチャー。クリップボード履歴を持つ）との受け渡し: パネルは key を失うと隠れるが、移り先が mycast なら隠さず
+  「貸している」状態で待つ（`LendRules`・`PanelController` の `decideOnResignKey`）。mycast が閉じて元のアプリを前面に戻したあと
+  `memode://paste`（ペーストボードの中身を貼る）・`memode://focus` を送ってくるので、key を取り直す（`takeBack`）。
+  mycast のパネルは別のアプリのウィンドウなので、通知が無く、貸している間はウィンドウ一覧（`CGWindowListCopyWindowInfo`）を 0.2 秒ごとに見る。
+  消えてから 2.5 秒返ってこない・mycast と元のアプリ以外が前面になったら隠れる。mycast 側は「⌃L の時点で memode のパネルが出ていたか」で戻り先を決める。
+  リリースは memode を先に出す（mycast だけ新しいと `paste` を古い memode が無視して、貼り付けが黙って消える）
 - メニューの操作は Swift の `AppDelegate.perform` を通り、タブと分割に関わるものは `{type: "command"}` として JS に送る
 - `web/src/monaco.generated.ts` は `web/scripts/gen-monaco-entry.mjs` が毎回作る（言語サービスを除いた Monaco の読み込み口。gitignore）
 - 言語: `languages.ts` の `languageForPath` が、Monaco の登録表 → 追加の表（`.zshrc`→shell・`.plist`→xml・`.toml`→ini・`.vue`→html 等）→ 1 行目の shebang の順で決める。

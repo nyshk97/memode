@@ -53,6 +53,8 @@ export interface EditorHost {
   setAppInfo(info: Extract<FromSwift, { type: "appInfo" }>): void;
   handleFileMessage(msg: Extract<FromSwift, { [key: string]: unknown }>): void;
   debugState(): DebugState;
+  /** エディタに文字を打てる状態か（mycast から貼るとき、フォーカスが戻ってから貼る） */
+  editorFocused(): boolean;
   /** ファイルの名前と中身から決まる言語（dev 版の自走の検証用） */
   detectLanguage(path: string, content?: string): string;
 }
@@ -63,6 +65,7 @@ declare global {
     memode: {
       receive(msg: FromSwift): void;
       debugState(): DebugState;
+      editorFocused(): boolean;
       detectLanguage(path: string, content?: string): string;
     };
   }
@@ -99,6 +102,7 @@ export function install(host: EditorHost): void {
       }
     },
     debugState: () => host.debugState(),
+    editorFocused: () => host.editorFocused(),
     detectLanguage: (path, content) => host.detectLanguage(path, content),
   };
   // Ctrl+Tab は macOS のメニューのキーとしては届かないので、ここで拾って Swift に回す

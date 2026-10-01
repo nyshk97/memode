@@ -108,6 +108,7 @@ const host: EditorHost = {
   },
   handleFileMessage: (msg) => files.handle(msg),
   detectLanguage: (path, content) => languageForPath(path, content),
+  editorFocused: () => workspace.activeEditor.hasTextFocus(),
   debugState() {
     const editor = workspace.activeEditor;
     const selections = editor.getSelections() ?? [];
