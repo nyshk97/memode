@@ -44,6 +44,8 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-01
+
 ### ✨ Added
 - 入力中に ⌃L で mycast を開き、クリップボード履歴から選んだものを memode に貼れるようにした
 
