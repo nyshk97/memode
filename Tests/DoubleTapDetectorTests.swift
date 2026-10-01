@@ -85,5 +85,7 @@ final class HideRulesTests: XCTestCase {
         XCTAssertFalse(HideRules.shouldRestorePreviousApp(reason: .focusLost, style: .activating))
         XCTAssertFalse(HideRules.shouldRestorePreviousApp(reason: .toggle, style: .nonactivating))
         XCTAssertFalse(HideRules.shouldRestorePreviousApp(reason: .focusLost, style: .nonactivating))
+        XCTAssertTrue(HideRules.shouldRestorePreviousApp(reason: .lastTabClosed, style: .activating))
+        XCTAssertFalse(HideRules.shouldRestorePreviousApp(reason: .lastTabClosed, style: .nonactivating))
     }
 }

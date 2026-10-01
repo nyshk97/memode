@@ -50,6 +50,8 @@ export class Workspace {
   onChange?: () => void;
   /** 未保存の変更があるファイルのタブを閉じようとしたとき（保存するか聞く） */
   onConfirmClose?: (doc: Doc, groupIndex: number) => void;
+  /** 最後のタブを閉じたとき（ウィンドウごと隠す。次に出すときは空のメモ 1 枚から） */
+  onLastTabClosed?: () => void;
 
   constructor(
     private container: HTMLElement,
@@ -171,7 +173,7 @@ export class Workspace {
     this.afterChange();
   }
 
-  /** タブを閉じる。最後の 1 枚なら、分割中はそのグループごと閉じ、分割していなければ空のメモを 1 枚作る。
+  /** タブを閉じる。最後の 1 枚なら、分割中はそのグループごと閉じ、分割していなければ空のメモを 1 枚作ってウィンドウを隠す。
    *  メモは確認なしで消える。未保存の変更があるファイルは、ほかのグループでも開いていなければ保存するか聞く */
   closeTab(groupIndex = this.activeGroup, docId?: number, force = false): void {
     const g = this.groups[groupIndex];
@@ -186,6 +188,7 @@ export class Workspace {
     }
     g.tabs.splice(at, 1);
     g.viewStates.delete(id);
+    let lastClosed = false;
     if (g.tabs.length === 0) {
       if (this.groups.length > 1) {
         this.removeGroup(groupIndex);
@@ -193,12 +196,14 @@ export class Workspace {
         const doc = this.createDoc();
         g.tabs.push(doc.id);
         this.showDoc(g, doc.id);
+        lastClosed = true;
       }
     } else if (g.active === id) {
       this.showDoc(g, g.tabs[Math.min(at, g.tabs.length - 1)]);
     }
     this.disposeIfUnused(id);
     this.afterChange();
+    if (lastClosed) this.onLastTabClosed?.();
   }
 
   /** Cmd+1〜8 は n 枚目、Cmd+9 は最後のタブ */

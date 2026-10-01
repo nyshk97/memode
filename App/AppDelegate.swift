@@ -37,6 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.mainMenu = MainMenu.build(target: self, action: #selector(menuAction(_:)))
         panelController = PanelController(style: PanelStyle.current)
         panelController.bridge.onAction = { [weak self] raw in
+            // 最後のタブを閉じた（JS の workspace.ts）。メニューの操作ではないのでここで受ける
+            if raw == "hide_panel" {
+                self?.panelController.hide(reason: .lastTabClosed)
+                return
+            }
             guard let action = MainMenu.Action(rawValue: raw) else { return }
             self?.perform(action, name: raw)
         }

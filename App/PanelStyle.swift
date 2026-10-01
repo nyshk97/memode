@@ -28,6 +28,8 @@ enum PanelStyle: String, CaseIterable {
 enum HideReason: String {
     /// 左 Shift のダブルタップ・メニューの「表示 / 隠す」
     case toggle
+    /// 最後のタブを閉じた
+    case lastTabClosed
     /// フォーカスがアプリの外に移った（外をクリックした等）
     case focusLost
     /// アップデートの確認の画面を出す（ポップアップは .floating なので、出したままだと画面が後ろに隠れる）
@@ -42,10 +44,10 @@ enum HideRules {
         !(keyWindowIsOurs || hasAttachedSheet || appIsModal)
     }
 
-    /// 隠したあと直前のアプリにフォーカスを戻すか。
+    /// 隠したあと直前のアプリにフォーカスを戻すか（自分で隠した: ダブルタップ・最後のタブを閉じた）。
     /// 外のクリックで隠れたときは、クリックした先のアプリにフォーカスが移っているので何もしない。
     /// nonactivating はそもそも前面のアプリを切り替えていないので戻す必要がない
     static func shouldRestorePreviousApp(reason: HideReason, style: PanelStyle) -> Bool {
-        reason == .toggle && style == .activating
+        (reason == .toggle || reason == .lastTabClosed) && style == .activating
     }
 }

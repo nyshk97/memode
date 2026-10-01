@@ -363,11 +363,20 @@ final class SelfTest {
         let lang = tabs((await workspace()).groups[0]).first?["language"] as? String
         check("choose_language", lang == "python", "language=\(String(describing: lang))")
 
-        // 全部閉じると、空のメモが 1 枚残る（使い捨てメモは確認なしで消える）
-        for _ in 0..<3 { await key(Key.w, [.command], chars: "w") }
+        // 最後の 1 枚の手前まではウィンドウを隠さない
+        for _ in 0..<2 { await key(Key.w, [.command], chars: "w") }
         ws = await workspace()
+        check("close_not_last_keeps_panel", panel.isVisible && tabs(ws.groups[0]).count == 1,
+              "visible=\(panel.isVisible) tabs=\(tabs(ws.groups[0]).count)")
+        // 最後の 1 枚を閉じると、ウィンドウごと隠れて空のメモが 1 枚残る（使い捨てメモは確認なしで消える）
+        await key(Key.w, [.command], chars: "w")
+        await sleep(0.3)
+        ws = await workspace()
+        check("close_last_hides_panel", !panel.isVisible, "visible=\(panel.isVisible)")
         check("close_all_leaves_empty", tabs(ws.groups[0]).count == 1 && ws.value == "" && ws.docCount == 1,
               "tabs=\(tabs(ws.groups[0]).count) docs=\(ws.docCount) value=\(ws.value.count)")
+        panel.show()
+        await sleep(0.5)
     }
 
     // MARK: - Phase 5

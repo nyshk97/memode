@@ -15,7 +15,8 @@ export type FromSwift =
 export type ToSwift =
   | { type: "ready" }
   | { type: "log"; event: string; detail?: string }
-  /** メニューのキーに届かないショートカット（Ctrl+Tab）を Swift のメニュー操作に回す */
+  /** メニューのキーに届かないショートカット（Ctrl+Tab）を Swift のメニュー操作に回す。
+   *  hide_panel はメニューに無い操作で、最後のタブを閉じたときにウィンドウを隠す */
   | { type: "action"; action: string }
   /** 保存・セッション・ファイルまわり（Swift の DocumentService が受ける） */
   | { type: "session" | "sessionSkipped" | "openPaths" | "quickOpenResend" | "save" | "confirmClose" | "fileStates" | "askConflict"; [key: string]: unknown };

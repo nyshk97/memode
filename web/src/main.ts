@@ -44,6 +44,7 @@ const workspace = new Workspace(
 );
 
 const files = new FileController(workspace);
+workspace.onLastTabClosed = () => post({ type: "action", action: "hide_panel" });
 
 // ステータスバーの右端の版。押すとアップデートを確認する（dev 版は Sparkle が無いので押せない）
 const statusVersion = document.getElementById("status-version")!;
