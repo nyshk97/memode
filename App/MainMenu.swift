@@ -67,8 +67,11 @@ enum MainMenu {
         view.addItem(item("言語を選ぶ…", .chooseLanguage, ""))
         view.addItem(item("ウィンドウの位置とサイズを元に戻す", .resetWindowFrame, ""))
         view.addItem(.separator())
-        view.addItem(item("次のタブ", .nextTab, "\t", .control))
-        view.addItem(item("前のタブ", .previousTab, "\t", [.control, .shift]))
+        // Ctrl+Tab・Ctrl+Shift+Tab もここに来る操作だが、メニューのキーとしては届かないので bridge.ts で拾って回している
+        let right = String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+        let left = String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
+        view.addItem(item("次のタブ", .nextTab, right, [.command, .option]))
+        view.addItem(item("前のタブ", .previousTab, left, [.command, .option]))
         for n in 1...9 {
             view.addItem(item("タブ \(n)", .selectTab, "\(n)", tag: n))
         }

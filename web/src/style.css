@@ -16,6 +16,7 @@
   --status-fg: rgb(255 255 255 / 0.45);
   --chip-bg: rgb(255 255 255 / 0.09);
   --accent: #7aa8ff;
+  --drop-bg: rgb(122 168 255 / 0.14);
   --pick-bg: rgb(46 46 56 / 0.86);
   --pick-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.15), 0 24px 60px rgb(0 0 0 / 0.5);
   --pick-selected: #3b6dff;
@@ -38,6 +39,7 @@
     --status-fg: rgb(0 0 0 / 0.45);
     --chip-bg: rgb(0 0 0 / 0.06);
     --accent: #2f6bff;
+    --drop-bg: rgb(47 107 255 / 0.1);
     --pick-bg: rgb(250 250 253 / 0.9);
     --pick-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7), 0 0 0 0.5px rgb(0 0 0 / 0.1), 0 24px 60px rgb(0 0 0 / 0.25);
     --pick-selected: #2f6bff;
@@ -208,6 +210,43 @@ body.appear {
 }
 #groups.split .group:not(.active) .editor-host {
   background: var(--sheet-bg-inactive);
+}
+
+/* タブのドラッグ（tabdrag.ts）。掴んだタブの写しがマウスに付いてきて、落とし先に縦線（タブの間）か面（エディタ）を出す */
+.tab-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 200;
+  box-sizing: border-box;
+  pointer-events: none;
+  opacity: 0.92;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+/* 目印は掴んだタブの写しより手前に出す（タブの間の線が写しに隠れないように） */
+.drop-marker {
+  display: none;
+  position: fixed;
+  z-index: 210;
+  pointer-events: none;
+}
+.drop-marker.line {
+  border-radius: 1px;
+  background: var(--accent);
+}
+.drop-marker.area {
+  border-radius: 10px;
+  background: var(--drop-bg);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+body.tab-dragging,
+body.tab-dragging * {
+  cursor: default !important;
+}
+/* ドラッグ中はエディタのホバー表示（定義・エラーの吹き出し）を出さない */
+body.tab-dragging .editor-host {
+  pointer-events: none;
 }
 
 #statusbar {

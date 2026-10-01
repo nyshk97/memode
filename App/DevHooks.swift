@@ -11,6 +11,7 @@ import AppKit
 ///   --index-home <path>    Cmd+P で探すホームを差し替える（自走の検証では必須）
 ///   --snapshot <png>       表示が済んだらエディタ部分を PNG に保存する
 ///   --demo                 タブを何枚か開いて左右に分割した状態で出す（見た目の確認用）
+///   --demo-drag <line|area> --demo に続けて、左のタブを掴んで右のタブの間（line）・右のエディタ（area）まで動かしたところで止める
 enum DevHooks {
     static func run(app: AppDelegate) {
         let args = CommandLine.arguments
@@ -79,10 +80,47 @@ enum DevHooks {
                 send(["type": "command", "name": "select_tab", "index": 2])
                 send(["type": "command", "name": "toggle_split", "index": 0])
                 send(["type": "command", "name": "select_tab", "index": 1])
+                if let i = args.firstIndex(of: "--demo-drag"), i + 1 < args.count {
+                    let mode = args[i + 1]
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { holdDemoDrag(panel, toArea: mode == "area") }
+                }
             }
         } else if args.contains("--show") {
             app.panelController.show()
         }
+    }
+}
+
+/// 左のタブを押して動かし、離さずに止める（ドラッグ中の見た目を撮るため。マウスのイベントは NSApp.sendEvent に流す）
+@MainActor
+private func holdDemoDrag(_ panel: PanelController, toArea: Bool) {
+    let js = """
+    (() => {
+      const gs = [...document.querySelectorAll('.group')];
+      const c = (el) => { const b = el.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2, b.left, b.width]; };
+      return [c(gs[0].querySelectorAll('.tab')[0]), c(gs[1].querySelectorAll('.tab')[0]), c(gs[1].querySelector('.editor-host'))];
+    })()
+    """
+    panel.webView.evaluateJavaScript(js) { result, _ in
+        guard let r = result as? [[Double]], r.count == 3 else { return Log.write("demo.drag_failed", "layout") }
+        let web = panel.webView
+        func point(_ x: Double, _ y: Double) -> NSPoint {
+            web.convert(NSPoint(x: x, y: web.isFlipped ? y : web.bounds.height - y), to: nil)
+        }
+        func send(_ type: NSEvent.EventType, _ x: Double, _ y: Double) {
+            guard let e = NSEvent.mouseEvent(
+                with: type, location: point(x, y), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: panel.panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return }
+            NSApp.sendEvent(e)
+        }
+        // 線は右のタブの左端のすぐ右（そのタブの前に入る）、面は右のエディタの真ん中
+        let to = toArea ? (r[2][0], r[2][1]) : (r[1][2] + 4, r[1][1])
+        send(.leftMouseDown, r[0][0], r[0][1])
+        for i in 1...6 {
+            let t = Double(i) / 6
+            send(.leftMouseDragged, r[0][0] + (to.0 - r[0][0]) * t, r[0][1] + (to.1 - r[0][1]) * t)
+        }
+        Log.write("demo.drag_holding", toArea ? "area" : "line")
     }
 }
 
@@ -143,6 +181,8 @@ final class SelfTest {
             ("cmd_w", Key.w, "w", [.command], "close_tab"),
             ("cmd_1", Key.one, "1", [.command], "select_tab:1"),
             ("ctrl_tab", Key.tab, "\t", [.control], "next_tab"),
+            ("cmd_opt_right", Key.right, "", [.command, .option], "next_tab"),
+            ("cmd_opt_left", Key.left, "", [.command, .option], "previous_tab"),
             ("cmd_backslash", Key.backslash, "\\", [.command], "toggle_split"),
         ]
         let menuFiles = AppInfo.dataDirectory.appendingPathComponent("files")
@@ -375,6 +415,17 @@ final class SelfTest {
         await key(Key.tab, [.control], chars: "\t")
         ws = await workspace()
         check("ctrl_tab_next", activeIndex(ws.groups[0]) == 1 && ws.value == "second", "active=\(activeIndex(ws.groups[0]))")
+        // Cmd+Opt+←→ で隣のタブへ。端まで行ったら反対の端に戻る
+        await key(Key.left, [.command, .option])
+        ws = await workspace()
+        check("cmd_opt_left_previous", activeIndex(ws.groups[0]) == 0 && ws.value == "買い物メモ\n牛乳", "active=\(activeIndex(ws.groups[0]))")
+        await key(Key.left, [.command, .option])
+        ws = await workspace()
+        check("cmd_opt_left_wraps", activeIndex(ws.groups[0]) == 1 && ws.value == "second", "active=\(activeIndex(ws.groups[0]))")
+        await key(Key.right, [.command, .option])
+        await key(Key.right, [.command, .option])
+        ws = await workspace()
+        check("cmd_opt_right_next", activeIndex(ws.groups[0]) == 1 && ws.value == "second", "active=\(activeIndex(ws.groups[0]))")
 
         // 分割すると、右に同じ文書が開く（model を共有するので文書は増えない）
         let docsBefore = ws.docCount
@@ -395,6 +446,8 @@ final class SelfTest {
         ws = await workspace()
         let titles = tabs(ws.groups[0]).compactMap { $0["title"] as? String }
         check("unsplit_keeps_tabs", ws.groups.count == 1 && titles == ["買い物メモ", "shared edit", "right only"], "groups=\(ws.groups.count) titles=\(titles)")
+
+        await dragTabs()
 
         // 言語を選ぶ（絞り込みに打って Enter）
         await key(Key.one, [.command], chars: "1")
@@ -421,6 +474,109 @@ final class SelfTest {
               "tabs=\(tabs(ws.groups[0]).count) docs=\(ws.docCount) value=\(ws.value.count)")
         panel.show()
         await sleep(0.5)
+    }
+
+    /// タブのドラッグ&ドロップ。マウスのイベントを NSApp.sendEvent に流す（WKWebView が受けて JS の mousedown・mousemove・mouseup になる）。
+    /// 始める状態: 分割なし・タブは [買い物メモ, shared edit, right only]。終わると分割なしの 3 枚に戻る
+    private func dragTabs() async {
+        func titles(_ ws: (groups: [[String: Any]], activeGroup: Int, docCount: Int, value: String)) -> [[String]] {
+            ws.groups.map { tabs($0).compactMap { $0["title"] as? String } }
+        }
+        func activeTitle(_ ws: (groups: [[String: Any]], activeGroup: Int, docCount: Int, value: String)) -> String? {
+            guard ws.activeGroup >= 0, ws.activeGroup < ws.groups.count else { return nil }
+            let g = ws.groups[ws.activeGroup]
+            return tabs(g)[safe: activeIndex(g)]?["title"] as? String
+        }
+        let docs = (await workspace()).docCount
+
+        // 同じタブバーの中: 先頭のタブを最後のタブの右の空きへ
+        guard let l0 = await layout(), let first = l0.first, let r0 = first.tabs.first, let last = first.tabs.last else {
+            return check("drag_layout", false, "layout=nil")
+        }
+        await drag(from: (r0.midX, r0.midY), to: (last.maxX + 30, last.midY))
+        var ws = await workspace()
+        check("drag_reorder", titles(ws) == [["shared edit", "right only", "買い物メモ"]] && activeTitle(ws) == "買い物メモ",
+              "titles=\(titles(ws)) active=\(activeTitle(ws) ?? "nil")")
+
+        // 分割していないとき、エディタの右半分へ落とすと分割して右へ移す
+        guard let l1 = await layout(), let g0 = l1.first else { return check("drag_layout", false, "layout=nil") }
+        await drag(from: (g0.tabs[1].midX, g0.tabs[1].midY), to: (g0.host.minX + g0.host.width * 0.75, g0.host.midY))
+        ws = await workspace()
+        check("drag_split_right", titles(ws) == [["shared edit", "買い物メモ"], ["right only"]] && ws.activeGroup == 1 && ws.docCount == docs,
+              "titles=\(titles(ws)) activeGroup=\(ws.activeGroup) docs=\(ws.docCount)")
+
+        // 左右のあいだ: 左の「買い物メモ」を右のタブバーの先頭へ（左からは消える）
+        guard let l2 = await layout(), l2.count == 2 else { return check("drag_layout", false, "groups!=2") }
+        await drag(from: (l2[0].tabs[1].midX, l2[0].tabs[1].midY), to: (l2[1].tabs[0].minX + 3, l2[1].tabs[0].midY))
+        ws = await workspace()
+        check("drag_to_other_group", titles(ws) == [["shared edit"], ["買い物メモ", "right only"]] && ws.activeGroup == 1
+                && activeTitle(ws) == "買い物メモ" && ws.value == "買い物メモ\n牛乳",
+              "titles=\(titles(ws)) activeGroup=\(ws.activeGroup) active=\(activeTitle(ws) ?? "nil")")
+
+        // 左の最後の 1 枚を右のエディタへ落とすと、左が空になって分割が閉じる
+        guard let l3 = await layout(), l3.count == 2 else { return check("drag_layout", false, "groups!=2") }
+        await drag(from: (l3[0].tabs[0].midX, l3[0].tabs[0].midY), to: (l3[1].host.midX, l3[1].host.midY))
+        ws = await workspace()
+        check("drag_last_tab_unsplits", titles(ws) == [["買い物メモ", "right only", "shared edit"]] && activeTitle(ws) == "shared edit"
+                && ws.docCount == docs,
+              "titles=\(titles(ws)) active=\(activeTitle(ws) ?? "nil") docs=\(ws.docCount)")
+
+        // 動かさずに離せば、ただのクリック（タブが切り替わるだけ）。同じ場所へ落としても何も変わらない
+        guard let l4 = await layout(), let g = l4.first else { return check("drag_layout", false, "layout=nil") }
+        await drag(from: (g.tabs[0].midX, g.tabs[0].midY), to: (g.tabs[0].midX + 2, g.tabs[0].midY))
+        await drag(from: (g.tabs[1].midX, g.tabs[1].midY), to: (g.tabs[1].maxX - 3, g.tabs[1].midY))
+        ws = await workspace()
+        let ghosts = (try? await panel.webView.evaluateJavaScript(
+            "document.querySelectorAll('.tab-ghost').length + (getComputedStyle(document.querySelector('.drop-marker')).display === 'none' ? 0 : 100)")) as? Int
+        check("drag_click_and_noop", titles(ws) == [["買い物メモ", "right only", "shared edit"]] && activeTitle(ws) == "right only" && ghosts == 0,
+              "titles=\(titles(ws)) active=\(activeTitle(ws) ?? "nil") leftovers=\(String(describing: ghosts))")
+    }
+
+    /// 各グループのタブとエディタの矩形（ページの左上から）
+    private func layout() async -> [(tabs: [CGRect], host: CGRect)]? {
+        let js = """
+        [...document.querySelectorAll('.group')].map(g => {
+          const r = (el) => { const b = el.getBoundingClientRect(); return [b.left, b.top, b.width, b.height]; };
+          return { tabs: [...g.querySelectorAll('.tab')].map(r), host: r(g.querySelector('.editor-host')) };
+        })
+        """
+        guard let groups = (try? await panel.webView.evaluateJavaScript(js)) as? [[String: Any]] else { return nil }
+        func rect(_ a: Any?) -> CGRect? {
+            guard let v = a as? [Double], v.count == 4 else { return nil }
+            return CGRect(x: v[0], y: v[1], width: v[2], height: v[3])
+        }
+        var out: [(tabs: [CGRect], host: CGRect)] = []
+        for g in groups {
+            guard let host = rect(g["host"]) else { return nil }
+            let tabRects = (g["tabs"] as? [Any] ?? []).compactMap(rect)
+            if tabRects.isEmpty { return nil }
+            out.append((tabRects, host))
+        }
+        return out
+    }
+
+    /// ページの座標で from を押して to まで動かして離す
+    private func drag(from: (CGFloat, CGFloat), to: (CGFloat, CGFloat)) async {
+        let web = panel.webView
+        func point(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
+            web.convert(NSPoint(x: x, y: web.isFlipped ? y : web.bounds.height - y), to: nil)
+        }
+        func send(_ type: NSEvent.EventType, _ p: NSPoint) {
+            guard let e = NSEvent.mouseEvent(
+                with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: panel.panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+                pressure: type == .leftMouseUp ? 0 : 1) else { return }
+            NSApp.sendEvent(e)
+        }
+        send(.leftMouseDown, point(from.0, from.1))
+        await sleep(0.1)
+        for i in 1...6 {
+            let t = CGFloat(i) / 6
+            send(.leftMouseDragged, point(from.0 + (to.0 - from.0) * t, from.1 + (to.1 - from.1) * t))
+            await sleep(0.04)
+        }
+        send(.leftMouseUp, point(to.0, to.1))
+        await sleep(0.4)
     }
 
     // MARK: - Phase 5
@@ -845,7 +1001,7 @@ final class SelfTest {
         static let w: UInt16 = 13, one: UInt16 = 18, o: UInt16 = 31, p: UInt16 = 35, backslash: UInt16 = 42
         static let n: UInt16 = 45, tab: UInt16 = 48, escape: UInt16 = 53
         static let h: UInt16 = 4, y: UInt16 = 16, t: UInt16 = 17, enter: UInt16 = 36
-        static let right: UInt16 = 124, down: UInt16 = 125
+        static let left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125
     }
 
     private func key(_ code: UInt16, _ mods: NSEvent.ModifierFlags = [], chars: String? = nil) async {
@@ -857,6 +1013,9 @@ final class SelfTest {
             flags.formUnion([.numericPad, .function])
         case Key.right:
             characters = String(Character(UnicodeScalar(NSRightArrowFunctionKey)!))
+            flags.formUnion([.numericPad, .function])
+        case Key.left:
+            characters = String(Character(UnicodeScalar(NSLeftArrowFunctionKey)!))
             flags.formUnion([.numericPad, .function])
         case Key.escape:
             characters = "\u{1b}"

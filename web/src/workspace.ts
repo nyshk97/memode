@@ -1,6 +1,7 @@
 import * as monaco from "./monaco.generated";
 import { languageForPath, languageName } from "./languages";
 import type { DiskSnapshot, FileBase, Session, SessionDoc } from "./session";
+import { TabDrag, type DragSource, type DropHit, type DropTarget } from "./tabdrag";
 
 // タブ（文書）と、左右の分割（グループ）。
 // - 文書（Doc）は Monaco の model を 1 つ持つ。同じ文書を左右両方で開くと、同じ model を共有して中身が同期する
@@ -73,6 +74,10 @@ export class Workspace {
   private activeGroup = 0;
   private nextDocId = 1;
   private renderQueued = false;
+  private drag = new TabDrag(
+    (x, y, source) => this.dropTargetAt(x, y, source),
+    (source, target) => this.moveTab(source, target),
+  );
   /** 状態が変わったら呼ぶ（セッションの保存に使う） */
   onChange?: () => void;
   /** 未保存の変更があるファイルのタブを閉じようとしたとき（保存するか聞く） */
@@ -257,6 +262,92 @@ export class Workspace {
       this.removeGroup(1);
     }
     this.afterChange();
+  }
+
+  /** タブをドラッグして落とした: 同じグループなら並べ替え、反対側なら移す（元からは消える。元が空になれば分割を閉じる）、
+   *  分割していなければ右に分割して移す（1 枚しか無ければ Cmd+\ と同じく左右の両方で開く） */
+  moveTab(source: DragSource, target: DropTarget): void {
+    const src = this.groups[source.group];
+    const id = source.docId;
+    const at = src?.tabs.indexOf(id) ?? -1;
+    if (!src || at < 0) return;
+    const state = id === src.active ? src.editor.saveViewState() : src.viewStates.get(id) ?? null;
+
+    if (target.kind === "split") {
+      if (this.groups.length !== 1) return;
+      if (src.tabs.length > 1) this.detach(src, id);
+      const right = this.addGroup(id);
+      if (state) right.editor.restoreViewState(state);
+      this.activeGroup = 1;
+      return this.afterChange();
+    }
+
+    const dst = this.groups[target.group];
+    if (!dst) return;
+    let index = target.kind === "tabs" ? target.index : dst.tabs.length;
+    if (dst === src) {
+      src.tabs.splice(at, 1);
+      if (at < index) index--;
+      src.tabs.splice(index, 0, id);
+      this.showDoc(src, id);
+    } else {
+      // 反対側でも同じ文書を開いていたら、そのタブを落とした場所へ動かす
+      const existing = dst.tabs.indexOf(id);
+      if (existing >= 0) {
+        dst.tabs.splice(existing, 1);
+        if (existing < index) index--;
+      }
+      dst.tabs.splice(index, 0, id);
+      if (state && dst.active !== id) dst.viewStates.set(id, state);
+      this.showDoc(dst, id);
+      this.detach(src, id);
+    }
+    this.activeGroup = this.groups.indexOf(dst);
+    this.afterChange();
+  }
+
+  /** グループからタブを外す（文書は捨てない）。空になったらグループごと閉じる */
+  private detach(g: Group, id: number): void {
+    const at = g.tabs.indexOf(id);
+    g.tabs.splice(at, 1);
+    if (g.tabs.length === 0) return this.removeGroup(this.groups.indexOf(g));
+    if (g.active === id) this.showDoc(g, g.tabs[Math.min(at, g.tabs.length - 1)]);
+    g.viewStates.delete(id);
+  }
+
+  /** ドラッグ中のマウスの下に落とし先があるか。落としても何も変わらない場所は null */
+  private dropTargetAt(x: number, y: number, source: DragSource): DropHit | null {
+    const inside = (r: DOMRect) => x >= r.left && x < r.right && y >= r.top && y < r.bottom;
+    for (const [gi, g] of this.groups.entries()) {
+      const bar = g.tabbar.getBoundingClientRect();
+      if (inside(bar)) {
+        const tabEls = [...g.tabbar.querySelectorAll<HTMLElement>(".tab")].map((el) => el.getBoundingClientRect());
+        let index = tabEls.findIndex((r) => x < r.left + r.width / 2);
+        if (index < 0) index = tabEls.length;
+        if (gi === source.group) {
+          const at = g.tabs.indexOf(source.docId);
+          if (index === at || index === at + 1) return null;
+        }
+        const ref = tabEls[Math.min(index, tabEls.length - 1)];
+        const lineX = index < tabEls.length ? ref.left - 2.5 : ref.right + 0.5;
+        return {
+          target: { kind: "tabs", group: gi, index },
+          rect: { left: lineX, top: ref.top, width: 2, height: ref.height },
+          style: "line",
+        };
+      }
+      const host = g.editor.getContainerDomNode().getBoundingClientRect();
+      if (!inside(host)) continue;
+      if (this.groups.length === 1) {
+        // 分割していないときは右半分に落とすと分割する
+        if (x < host.left + host.width / 2) return null;
+        const half = host.width / 2;
+        return { target: { kind: "split" }, rect: { left: host.left + half, top: host.top, width: half, height: host.height }, style: "area" };
+      }
+      if (gi === source.group) return null;
+      return { target: { kind: "group", group: gi }, rect: host, style: "area" };
+    }
+    return null;
   }
 
   private removeGroup(index: number): void {
@@ -466,6 +557,7 @@ export class Workspace {
             e.preventDefault();
             const index = this.groups.indexOf(g);
             if (e.button === 1) return this.closeTab(index, id);
+            if (e.button === 0) this.drag.begin(e, { group: index, docId: id }, tab);
             this.activeGroup = index;
             this.showDoc(g, id);
             this.afterChange();

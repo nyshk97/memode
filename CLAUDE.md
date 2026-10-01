@@ -14,6 +14,9 @@
   nonactivating なので既定のままだと非アクティブの灰色になる）で、WKWebView はその上に載る。ページは枠に薄い色だけ塗り、
   文字を書く面（`.editor-host`）だけ濃い板にする。Monaco のテーマは背景を透明にしてある（`languagedefs.ts`）
 - `web/src/workspace.ts`: タブ（文書 = Monaco の model）と左右分割（グループ。最大 2 つ）。同じ文書を左右で開くと model を共有する。
+  タブのドラッグ&ドロップは `tabdrag.ts`（HTML の draggable は使わず mousedown・mousemove・mouseup を自分で追う。タブの mousedown は
+  エディタのフォーカスを保つため preventDefault しているので draggable では始まらない）。同じタブバーなら並べ替え、反対側へは移す
+  （元からは消え、元が空になれば分割を閉じる）、分割していなければエディタの右半分で分割する（`Workspace.moveTab`）。
   `quickpick.ts` は上に出る絞り込み付きの一覧（言語の選択・Cmd+P）
 - 保存・セッション: 中身とタブの状態は JS（`web/src/files.ts`・`session.ts`）、ファイルの読み書き・確認のダイアログ・`session.json` は
   Swift（`DocumentService`・`FileIO`・`SessionStore`）。JS は Swift から `restore` を受け取るまでセッションを書かない（起動直後の空の状態で上書きしないため）
@@ -39,6 +42,7 @@
   Markdown は Monaco の文法を読み込んで、見出し・リストの記号・チェックボックス・済みの行・インラインコードを別のトークンに分けたものを登録し直している（文字の色は同じファイルの `syntax()`）
 - アプリのショートカットは `App/MainMenu.swift` のメインメニューに置く（Monaco 側でこれらのキーを使わない）。
   Ctrl+Tab だけはメニューのキーとして届かないので、`bridge.ts` で拾って `action` として Swift に回す
+  （メニューの「次のタブ」「前のタブ」のキーは Cmd+Opt+→・←）
 
 ## dev 版と常用版
 
