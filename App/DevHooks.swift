@@ -360,7 +360,7 @@ final class SelfTest {
         await key(Key.n, [.command], chars: "n")
         ws = await workspace()
         let newTitle = tabs(ws.groups[0]).last?["title"] as? String ?? ""
-        check("cmd_n_new_tab", tabs(ws.groups[0]).count == 2 && activeIndex(ws.groups[0]) == 1 && ws.value == "" && newTitle.hasPrefix("無題-"),
+        check("cmd_n_new_tab", tabs(ws.groups[0]).count == 2 && activeIndex(ws.groups[0]) == 1 && ws.value == "" && newTitle == "scratch",
               "tabs=\(tabs(ws.groups[0]).count) active=\(activeIndex(ws.groups[0])) title=\(newTitle)")
         panel.bridge.send(["type": "setContent", "value": "second"])
         await sleep(0.3)

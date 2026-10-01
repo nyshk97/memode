@@ -349,7 +349,7 @@ final class DocumentService {
         }
         #endif
         let savePanel = NSSavePanel()
-        savePanel.nameFieldStringValue = body["suggestedName"] as? String ?? "無題.txt"
+        savePanel.nameFieldStringValue = body["suggestedName"] as? String ?? "scratch.txt"
         savePanel.canCreateDirectories = true
         savePanel.allowsOtherFileTypes = true
         currentSavePanel = savePanel

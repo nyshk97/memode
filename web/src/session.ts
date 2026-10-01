@@ -18,7 +18,6 @@ export interface DiskSnapshot {
 export interface SessionDoc {
   id: number;
   path?: string;
-  untitledIndex: number;
   language: string;
   /** メモは常に、ファイルは未保存の変更があるときだけ */
   content?: string;

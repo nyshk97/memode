@@ -62,7 +62,7 @@ export class FileController {
   /** 保存ダイアログに最初に入れる名前。メモは 1 行目から作り、言語の拡張子を付ける */
   private suggestedName(doc: Doc): string {
     if (doc.path) return doc.path.split("/").pop()!;
-    const base = this.workspace.title(doc).replace(/[/\\:]/g, "-").replace(/…$/, "").slice(0, 50).trim() || "無題";
+    const base = this.workspace.title(doc).replace(/[/\\:]/g, "-").replace(/…$/, "").slice(0, 50).trim() || "scratch";
     const lang = monaco.languages.getLanguages().find((l) => l.id === doc.model.getLanguageId());
     const ext = doc.model.getLanguageId() === "plaintext" ? ".txt" : (lang?.extensions?.[0] ?? ".txt");
     return base + ext;

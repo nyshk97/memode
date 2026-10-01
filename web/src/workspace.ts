@@ -12,8 +12,6 @@ export interface Doc {
   model: monaco.editor.ITextModel;
   /** 保存先。未保存のメモ（使い捨て）は undefined */
   path?: string;
-  /** 「無題-N」の N */
-  untitledIndex: number;
   /** 最後に保存・読み込みしたときの model の版（getAlternativeVersionId）。-1 なら未保存の変更あり */
   savedVersion: number;
   /** ファイルの先頭に BOM があったか（保存するときに付け直す） */
@@ -67,17 +65,11 @@ export class Workspace {
 
   // MARK: - 文書
 
-  private createDoc(value = "", language = "plaintext", restoreAs?: { id: number; untitledIndex: number }): Doc {
-    let untitledIndex = restoreAs?.untitledIndex ?? 1;
-    if (!restoreAs) {
-      const used = new Set([...this.docs.values()].filter((d) => !d.path).map((d) => d.untitledIndex));
-      while (used.has(untitledIndex)) untitledIndex++;
-    }
+  private createDoc(value = "", language = "plaintext", restoreId?: number): Doc {
     const model = monaco.editor.createModel(value, language);
     const doc: Doc = {
-      id: restoreAs?.id ?? this.nextDocId++,
+      id: restoreId ?? this.nextDocId++,
       model,
-      untitledIndex,
       savedVersion: model.getAlternativeVersionId(),
       bom: false,
     };
@@ -87,12 +79,12 @@ export class Workspace {
   }
 
   /** タブの見出し。メモは 1 行目、ファイルはファイル名。
-   *  1 行目に文字（かな・漢字・英数字）が無いとき（空・`{` だけ等）は「無題-N」 */
+   *  1 行目に文字（かな・漢字・英数字）が無いとき（空・`{` だけ等）は「scratch」 */
   title(doc: Doc): string {
     if (doc.path) return doc.path.split("/").pop() ?? doc.path;
     const lines = doc.model.getLinesContent();
     const first = lines.find((l) => l.trim() !== "")?.trim();
-    if (!first || !/[\p{L}\p{N}]/u.test(first)) return `無題-${doc.untitledIndex}`;
+    if (!first || !/[\p{L}\p{N}]/u.test(first)) return "scratch";
     return first.length > 30 ? first.slice(0, 30) + "…" : first;
   }
 
@@ -332,7 +324,7 @@ export class Workspace {
       }),
       docs: this.allDocs.map((d) => {
         const dirty = this.isDirty(d);
-        const out: SessionDoc = { id: d.id, untitledIndex: d.untitledIndex, language: d.model.getLanguageId(), dirty };
+        const out: SessionDoc = { id: d.id, language: d.model.getLanguageId(), dirty };
         if (d.path) out.path = d.path;
         if (!d.path || dirty) out.content = d.model.getValue();
         if (d.bom) out.bom = true;
@@ -364,7 +356,7 @@ export class Workspace {
       }
       // 色付けできる言語が増えたときのために、plaintext のファイルだけは名前から決め直す
       const language = sd.path && sd.language === "plaintext" ? languageForPath(sd.path, content) : sd.language;
-      const doc = this.createDoc(content ?? "", language, { id: sd.id, untitledIndex: sd.untitledIndex });
+      const doc = this.createDoc(content ?? "", language, sd.id);
       doc.path = sd.path;
       if (sd.path && !sd.dirty) {
         doc.base = sd.disk!.base;
