@@ -290,6 +290,9 @@ final class SelfTest {
         panel.show()
         await sleep(0.8)
 
+        // 9d. mycast にキー入力を貸して、memode://focus・paste で返ってくる
+        await handoff()
+
         // 10. 左 Shift のダブルタップで出し入れする（監視から届いたイベントと同じ入口に流す）
         panel.hide(reason: .toggle)
         await sleep(0.3)
@@ -789,6 +792,116 @@ final class SelfTest {
         await sleep(0.4)
         let tabsAfter = (await workspace()).groups.map { tabs($0).count }
         check("url_relative_ignored", tabsAfter == tabsBefore, "tabs=\(tabsBefore)->\(tabsAfter)")
+    }
+
+    /// mycast の代わりに別のアプリ（ふつうは Finder）を前面にして、キー入力を外へ移す（mycast と同じく、別のアプリが前面になってパネルが key を失う）。
+    /// そのアプリを mycast とみなす（mycast のパネルは無いので、貸したらすぐ「mycast のパネルが消えた」になり、2.5 秒で隠れる）。
+    /// 返すときも mycast と同じく、元のアプリ（出したときの前面）を前面に戻してから URL を送る
+    private func handoff() async {
+        let own = ProcessInfo.processInfo.processIdentifier
+        let original = panel.isLauncher
+        panel.show()
+        await sleep(0.6)
+        let home = panel.previousApp
+        let candidates = NSWorkspace.shared.runningApplications.filter {
+            $0.activationPolicy == .regular && !$0.isHidden && $0.processIdentifier != own && $0.processIdentifier != home?.processIdentifier
+                && !original($0.bundleIdentifier) && $0.bundleURL != nil
+        }.sorted { ($0.bundleIdentifier == "com.apple.finder" ? 0 : 1) < ($1.bundleIdentifier == "com.apple.finder" ? 0 : 1) }
+        guard let home, !home.isTerminated, candidates.count >= 2 else {
+            check("handoff_setup", false, "home=\(home?.bundleIdentifier ?? "nil") candidates=\(candidates.compactMap(\.bundleIdentifier))")
+            return
+        }
+        // 1 つ目を mycast の代わり、2 つ目を「mycast でも元のアプリでもないアプリ」にする
+        let stand = candidates[0], other = candidates[1]
+        panel.isLauncher = { $0 == stand.bundleIdentifier || original($0) }
+        var hides = 0
+        let onHide = panel.onHide
+        panel.onHide = { hides += 1; onHide?() }
+        defer {
+            panel.isLauncher = original
+            panel.onHide = onHide
+        }
+        func activate(_ url: URL?) async {
+            guard let url else { return }
+            _ = try? await NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
+        }
+        /// 本物と同じく Launch Services から届ける（mycast と同じく、memode を前面にしない開き方）
+        func openSelf(_ host: String) async {
+            let config = NSWorkspace.OpenConfiguration()
+            config.activates = false
+            _ = try? await NSWorkspace.shared.open([URL(string: "\(AppInfo.urlScheme)://\(host)")!],
+                                                   withApplicationAt: Bundle.main.bundleURL, configuration: config)
+        }
+        /// seconds 秒のあいだ一度も隠れなかったか
+        func watchVisible(_ seconds: Double) async -> Bool {
+            var always = true
+            for _ in 0..<Int(seconds / 0.1) {
+                if !panel.isVisible { always = false }
+                await sleep(0.1)
+            }
+            return always
+        }
+        /// mycast を開く → 閉じて元のアプリを前面に戻す、までを真似る。貸している間ずっと出ていたか・貸していたか・key でなかったかを返す
+        func lendAndReturn() async -> (stayed: Bool, lent: Bool, keyWhileLent: Bool) {
+            await activate(stand.bundleURL)
+            var stayed = await watchVisible(1.0)
+            let lent = panel.isLent
+            let key = panel.panel.isKeyWindow
+            await activate(home.bundleURL)
+            stayed = await watchVisible(0.4) && stayed
+            return (stayed, lent, key)
+        }
+        Log.write("selftest.handoff_apps", "home=\(home.bundleIdentifier ?? "?") stand=\(stand.bundleIdentifier ?? "?") other=\(other.bundleIdentifier ?? "?")")
+
+        // ① 貸してから focus が届くまで一度も隠れず、そのあと key に戻る
+        hides = 0
+        var r = await lendAndReturn()
+        await openSelf("focus")
+        await sleep(0.8)
+        var state = await panel.bridge.debugState()
+        check("handoff_focus", r.stayed && hides == 0 && r.lent && !r.keyWhileLent && panel.panel.isKeyWindow && !panel.isLent
+              && (state?["focused"] as? Bool) == true,
+              "stayed=\(r.stayed) hides=\(hides) lent=\(r.lent) keyWhileLent=\(r.keyWhileLent) key=\(panel.panel.isKeyWindow) lentAfter=\(panel.isLent) focused=\(String(describing: state?["focused"]))")
+
+        // ② key でない状態から paste を受けると、ペーストボードの文字列がエディタに入る（ユーザーのクリップボードは最後に戻す）
+        panel.bridge.send(["type": "setContent", "value": ""])
+        await sleep(0.3)
+        let saved = savePasteboard()
+        let marker = "handoff-貼り付け-\(Int.random(in: 1000...9999))"
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(marker, forType: .string)
+        hides = 0
+        r = await lendAndReturn()
+        await openSelf("paste")
+        await sleep(1.0)
+        state = await panel.bridge.debugState()
+        restorePasteboard(saved)
+        check("handoff_paste", r.stayed && hides == 0 && r.lent && !r.keyWhileLent && (state?["value"] as? String) == marker && panel.panel.isKeyWindow,
+              "stayed=\(r.stayed) hides=\(hides) lent=\(r.lent) keyWhileLent=\(r.keyWhileLent) key=\(panel.panel.isKeyWindow) pasted=\((state?["value"] as? String) == marker)")
+
+        // ③ 貸している間に mycast でも元のアプリでもないアプリが前面になったら隠れる
+        hides = 0
+        await activate(stand.bundleURL)
+        await sleep(0.8)
+        let lent = panel.isLent
+        await activate(other.bundleURL)
+        await sleep(0.8)
+        check("handoff_other_app_hides", lent && !panel.isVisible && hides == 1, "lent=\(lent) visible=\(panel.isVisible) hides=\(hides)")
+
+        // ④ 貸したまま mycast のパネルが無い（閉じた）状態が 2.5 秒続いたら隠れる
+        await activate(home.bundleURL)
+        panel.show()
+        await sleep(0.6)
+        hides = 0
+        await activate(stand.bundleURL)
+        await sleep(0.8)
+        let lentBeforeTimeout = panel.isLent && panel.isVisible
+        await sleep(2.6)
+        check("handoff_timeout_hides", lentBeforeTimeout && !panel.isVisible && !panel.isLent && hides == 1,
+              "lentBefore=\(lentBeforeTimeout) visible=\(panel.isVisible) lent=\(panel.isLent) hides=\(hides)")
+        await activate(home.bundleURL)
+        panel.show()
+        await sleep(0.6)
     }
 
     private func saveAndFiles() async {

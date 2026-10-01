@@ -187,6 +187,11 @@ final class DocumentService {
             if !panel.isVisible { panel.show() }
             return
         }
+        // mycast（クリップボード履歴）が閉じたあと、キー入力を返しに来る
+        if host == "focus" || host == "paste" {
+            panel.takeBack(paste: host == "paste")
+            return
+        }
         guard host == "open",
               let raw = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "path" })?.value,
               raw.hasPrefix("/") else {

@@ -35,6 +35,10 @@ grep -E 'NG|selftest.done|app.terminate|flush_timeout|js\.' "$L"
   ファイルを開く（Cmd+O・Cmd+P のあいまい検索・memode:// で記号入りのパス・無いパス・ディレクトリの登録・相対パスは無視）。ファイル選択だけは飛ばす（`openPathOverride`）。
   Cmd+P の一覧は偽のホームに「入るもの（Dropbox・深い隠しディレクトリ・git の未コミット）」と「入らないもの（OrbStack・Library・
   ホーム直下の隠しディレクトリ・node_modules・.gitignore・.ssh）」を作って確かめる
+  mycast への受け渡し（`handoff_*`）: 動いている別のアプリ（ふつうは Finder）を mycast とみなして前面にし、元のアプリを前面に戻してから
+  `memode-dev://focus`・`paste` を Launch Services 経由（前面にしない開き方）で自分に送る。貸している間一度も隠れない・key に戻る・ペーストボードの文字列が入る・
+  3 つ目のアプリが前面になったら隠れる・mycast のパネルが無いまま 2.5 秒で隠れる。**途中で Finder ともう 1 つのアプリが前面に出る**（元のアプリ・Finder 以外の
+  ふつうのアプリが 1 つは動いている必要がある。無ければ `handoff_setup NG`）
 - 日本語入力（IME）・全画面アプリの上に出るか・実際のキーボードからのダブルタップ・外のクリックで隠れるか・
   タブバーの空きを実際に掴んで動かせるか（タブの上を押したらタブが切り替わるか）は、自走では確かめられない。人が試す
 
@@ -83,6 +87,33 @@ for run in 1 2; do mise run stop >/dev/null; : > "$L"; open -g build/Build/Produ
 ```
 
 1 回目に `app.data_migrate moved ...` と `session.loaded docs=N`（移す前と同じ数）、2 回目は `app.data_migrate` が出ずに同じ置き場を読めば通っている。
+
+## mycast との受け渡し（実物の mycast と）
+
+⌃L で mycast（`~/mycast`）を開いて閉じたとき、memode にキー入力が返るか。mycast の dev 版の検証フック（フォーカスを奪わない）で、
+「memode が出ているかの判定」と「Esc で `focus` が届く」までは確かめられる。貼り付けの Enter はフックで撃てないので人が試す。
+
+```sh
+cd ~/mycast && mise run run; cd -        # /Applications/mycast Dev.app を入れて起動
+D=$(mktemp -d); mkdir -p "$D/home"; ML=~/Library/Logs/memode-dev/memode.log; CL=~/Library/Logs/mycast/mycast-dev.log
+mise run stop; open -g build/Build/Products/Debug/Memode-dev.app --args --data-dir "$D" --index-home "$D/home"; sleep 3
+B="/Applications/mycast Dev.app/Contents/MacOS/mycast Dev"
+"$B" --show root --hide; sleep 1; grep 'panel.shown' "$CL" | tail -1      # 隠れているとき return_to=-（メニューバーのアイテムは数えない）
+open -g "memode-dev://show"; sleep 1.5
+"$B" --show root --key escape; sleep 2.5
+grep -E 'panel.shown|handoff' "$CL" | tail -2   # return_to=memode-dev・handoff.sent url=memode-dev://focus
+grep -E 'url.open|panel.show' "$ML" | tail -2   # url.open memode-dev://focus → panel.show
+osascript -e 'quit app "mycast Dev"'; mise run stop
+```
+
+人が試すもの（常用版どうし、または dev 版どうし。dev 版で試すときは常用版の memode を止める。左 Shift のダブルタップで両方出る）:
+
+- memode で入力中に ⌃L（dev は ⌃⌥L）→ `c` → 履歴で Enter → memode のカーソル位置に入る。memode は隠れない。ログに `panel.lend` → `panel.lend_end reason=paste` → `panel.paste focused=true sent=true`
+- ⌃L → Esc / ⌃L 再押下 / ⌘Enter → memode にそのまま打てる（`lend_end reason=focus`）
+- ⌃L → 他のアプリをクリック → memode も隠れる（`lend_end reason=other_app:…`）。元のアプリをクリックしたときは 2.5 秒後に隠れる（`reason=timeout`）
+- ⌃L を開いたまま memode のパネルをクリック → memode に打てる（`reason=key`）
+- 絵文字（⌃⌘Space）から貼っても同じ。memode を出していないときの ⌃L は今まで通り元のアプリに貼る
+- 日本語入力のまま ⌃L → 貼ったあと memode の入力ソースが日本語に戻っている
 
 ## ログイン時に起動
 
