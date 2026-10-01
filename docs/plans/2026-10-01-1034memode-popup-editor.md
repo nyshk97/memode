@@ -105,11 +105,11 @@ Cursor の AI 機能・チャット・ターミナルはほぼ使っていない
 - [x] 大きすぎるファイル・バイナリ・UTF-8 として読めないファイルは開かずに知らせる（上限は実装時に決める）。BOM と改行コード（CRLF）は読んだときのものを保って書き戻す
 
 ### Phase 7: 配布と常用版 [AI🤖]
-- [ ] アイコン（dev 版は「DEV」の印付き）
-- [ ] Sparkle（常駐して存在を忘れる系なので、自動チェックを ON）。dev 版には `SUFeedURL` を入れない
+- [x] アイコン（dev 版は「DEV」の印付き）
+- [x] Sparkle（常駐して存在を忘れる系なので、自動チェックを ON）。dev 版には `SUFeedURL` を入れない
 - [ ] 配信用のリポジトリ `memode-releases`、`docs/CHANGELOG.md`、`scripts/changelog.py`、`build.sh`（`--skip-notarize` 付き）、`release.sh`、`mise run release`。手順は personal-mac-apps.md の「リリース」に従う
 - [ ] `nyshk97/tap` に cask を足し、Brewfile に `cask 'nyshk97/tap/memode'` を足す
-- [ ] `VERIFY.md` に、ここまでで通った検証の手順を書く
+- [x] `VERIFY.md` に、ここまでで通った検証の手順を書く
 
 ### 動作確認 [人間👨‍💻]
 - [ ] 常用版で数日使ってみる: メモを書く・Cmd+P でファイルを開く・`memode <path>`・分割・再起動後の復元・内蔵 1 枚と 2 枚の両方
@@ -133,6 +133,8 @@ Cursor の AI 機能・チャット・ターミナルはほぼ使っていない
 - **除く場所の判定が狂っていた**（自走の検証で発見）: `FileManager.enumerator(at: URL)` は起点が /var/... でも /private/var/... のパスを返し、`resolvingSymlinksInPath()` は逆に /private を外すので、深さの計算が 1 ずれて OrbStack・Library/Preferences が一覧に入った（修正前は `cmd_p_home_index NG`、パスの一覧に `.../home/OrbStack/docker/big.txt`）。`enumerator(atPath:)` の相対パスでたどるようにして解消。本物のホーム（/Users/...）では起きない形だったが、たどり方に頼らない作りにした
 - 一覧を作り直す間隔は、登録フォルダだけだったときの 30 秒から、ホーム全体に広げたときに 5 分（`indexTTL = 300`）に変えた
 - JS には一覧をパスだけ・変わったときだけ送る（版の番号で判断。JS が一覧を持っていなければ `quickOpenResend` で送り直してもらう）
+- ドロップ対策（実装のレビューで出た P1 のうち、ユーザーが入れると決めたもの）: Finder からのファイルのドロップは `EditorWebView.performDragOperation` で受けてタブで開き、エディタ以外のページへの移動は `WKNavigationDelegate` で止める。`--selftest` の `navigation_blocked`（`about:blank` への移動）は、止める処理を外した版で NG、入れた版で OK になることを確認（`file://` への移動は WebKit 自身が断るので、それで試すと止める処理を外しても通ってしまった）
+- Phase 7: アイコンは `scripts/make-icon.swift`（フルブリード・dev 版は DEV の帯）。リリースのスクリプトは MenuBar Tidy の原本から。CHANGELOG の頭を原本から切り出すとき、「書き方」の例の中の `## [Unreleased]` で切ってしまい `changelog.py check` が落ちた（原本のメモにある罠そのもの）。`make-release-zip.sh` の `$FEED_URL）` は bash 3.2 の全角の罠で、検出の正規表現で見つけて `${FEED_URL}` に直した
 - 独自の URL スキーム（`WKURLSchemeHandler`）で配った worker は動く（worker から返事が来ることで確認）。Resource Timing には worker の読み込みが載らないので、その判定には使えない
 - dev 版の `--selftest`（キーは `NSEvent` を作って `NSApp.sendEvent` に流す）で、両方のスタイルとも 20 項目が全部通った（2026-10-01）。Cmd+N/P/S/Shift+S/W/1・Cmd+\ はメインメニューに届き、Cmd+A/C/X/V も効く
 - **Ctrl+Tab はメインメニューのキーとしては届かなかった**（修正前の selftest で `menu_ctrl_tab NG got=(none)`）。`bridge.ts` で keydown を拾い、`action` として Swift に回すようにして通した

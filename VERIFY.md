@@ -93,6 +93,15 @@ WID=$(osascript -l JavaScript -e 'ObjC.import("CoreGraphics"); const l=ObjC.deep
 screencapture -x -o -l "$WID" /tmp/memode-panel.png; mise run stop
 ```
 
+## 配布物（公証の手前まで）
+
+```sh
+mise run release:zip   # Release ビルド → Sparkle の中身を内側から署名し直す → 署名・Hardened Runtime・timestamp・SUFeedURL を検証 → zip
+```
+
+`OK: dist/Memode-<version>.zip` で通っている。dev 版に配信先が入っていないことも見る:
+`PlistBuddy -c 'Print :SUFeedURL' build/Build/Products/Debug/Memode-dev.app/Contents/Info.plist` が空。
+
 ## ビルド成果物の確認
 
 - 署名: `codesign -dvv build/Build/Products/Debug/Memode-dev.app 2>&1 | grep Authority` が `Apple Development` であること（ad-hoc だとアクセシビリティの許可がリビルドのたびに外れる）

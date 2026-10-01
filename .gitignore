@@ -6,3 +6,4 @@ build/
 web/node_modules/
 web/dist/
 web/src/monaco.generated.ts
+dist/

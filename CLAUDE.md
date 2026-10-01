@@ -46,6 +46,17 @@
 - 署名のハッシュ・Team ID は public リポジトリに書かない。`scripts/gen-signing-xcconfig.sh` が keychain から引いて `*.local.xcconfig`（gitignore）に書く
 - `.xcodeproj` は生成物（gitignore）。設定は `project.yml` を直す
 
+## リリース
+
+- 手順は 1 つ: `docs/CHANGELOG.md` の `[Unreleased]` を埋めて commit・push → `mise run release [patch|minor|major|x.y.z]`。
+  ほかの経路（xcodebuild と gh release create を直接叩く等）を書き足さない（署名・公証が抜けた版が出る）
+- 配布物は配信用の public リポジトリ `nyshk97/memode-releases` の GitHub Release に置き、Sparkle の feed は
+  `releases/latest/download/appcast.xml`。cask は `nyshk97/homebrew-tap` の `Casks/memode.rb`（リリースで自動更新）。`memode` コマンドは cask の `binary` で入る
+- Sparkle の EdDSA 鍵は keychain の account `memode`。控えは `~/Library/CloudStorage/Dropbox/secrets/sparkle-ed25519-memode-private.key`
+- 署名の ID は `scripts/gen-signing-xcconfig.sh` が keychain から決める（public リポジトリなので Team ID もハッシュも書かない）
+- アイコンは `mise run icon`（`scripts/make-icon.swift`）で作り直す。生成した PNG はコミットする
+- 常用版（Memode）と dev 版（Memode-dev）を同時に動かすと、左 Shift のダブルタップで両方が反応する。開発しないときは dev 版を止める
+
 ## 検証
 
 `VERIFY.md` を見る。dev 版の起動引数 `--selftest` で、キー操作・メニュー・クリップボード・フォーカスの戻りを自動で確かめられる。

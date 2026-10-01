@@ -37,5 +37,11 @@
 	<string>$(MEMODE_URL_SCHEME)</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>$(MEMODE_SU_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>2gvUMKPV+ZcyJ2LRom+7gg/CwqJf5zCL3MeQ9/qp59Y=</string>
 </dict>
 </plist>

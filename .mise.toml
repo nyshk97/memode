@@ -61,6 +61,26 @@ ln -sf "$PWD/scripts/memode" ~/.local/bin/memode
 ls -l ~/.local/bin/memode
 """
 
+# --- リリース -------------------------------------------------------------
+# 叩く前に docs/CHANGELOG.md の [Unreleased] を埋めて commit・push しておく（空なら止まる）
+
+[tasks."release:zip"]
+description = "Release ビルドを署名・検証して dist/ に zip を作る（notarize の手前まで）"
+run = "bash scripts/make-release-zip.sh"
+
+[tasks."release:notarize"]
+description = "dist/ の zip を notarize して staple 済みに差し替える"
+run = "bash scripts/notarize.sh"
+
+[tasks.release]
+description = "バージョンを上げてビルド・notarize・GitHub Release（memode-releases）・cask の更新まで通す"
+usage = 'arg "<bump>" help="patch|minor|major|x.y.z" default="patch"'
+run = 'bash scripts/release.sh "$usage_bump"'
+
+[tasks.icon]
+description = "アプリアイコン（常用版と dev 版）を作り直す"
+run = "swift scripts/make-icon.swift"
+
 [tasks.log]
 description = "dev 版のログを追う"
 run = "tail -f ~/Library/Logs/memode-dev/memode.log"

@@ -1,11 +1,25 @@
 import AppKit
 import ApplicationServices
+#if !DEBUG
+import Sparkle
+#endif
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var panelController: PanelController!
     private(set) var shiftTapMonitor: ShiftTapMonitor!
     private(set) var documents: DocumentService!
     private var statusItem: NSStatusItem!
+    #if !DEBUG
+    /// アプリ内アップデート（dev 版では動かさない。feed も Release にしか無い）
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        NSApp.activate()
+        updaterController.checkForUpdates(sender)
+    }
+    #endif
+
     /// 自走の検証（dev 版）で、メニューの操作が届いたかを数える
     private(set) var menuActionLog: [String] = []
 
@@ -214,6 +228,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let about = NSMenuItem(title: "Memode について", action: #selector(showAbout(_:)), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
+        #if !DEBUG
+        let update = NSMenuItem(title: "アップデートを確認…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        update.target = self
+        menu.addItem(update)
+        #endif
         menu.addItem(NSMenuItem(title: "終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
         menu.delegate = self
         statusItem.menu = menu
