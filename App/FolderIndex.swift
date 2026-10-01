@@ -4,6 +4,7 @@ import Foundation
 /// - ホーム（~）の下は既定で全部。ただし重い・関係ない場所（homeExcluded・隠しディレクトリ・skippedDirectories）は入らない
 /// - git のリポジトリの中は `git ls-files`（.gitignore で除いたものは出ない。コミット前のファイルは出る）
 /// - それ以外は走査する（シンボリックリンクはたどらない。.app などのパッケージの中には入らない）
+/// - 開けないファイル（画像・PDF 等のバイナリ、上限より大きいもの）は候補にしない。中身は読まず、拡張子と大きさだけで決める
 enum FolderIndex {
     static let maxFiles = 300_000
     static let maxDepth = 14
@@ -17,6 +18,37 @@ enum FolderIndex {
         ".cache", ".idea", ".gradle", "target", ".terraform", ".dart_tool", ".pnpm-store", ".yarn", ".expo", ".angular",
         ".ssh", ".gnupg", ".Trash",
     ]
+
+    /// 候補にしない拡張子（小文字）。FileIO.read がバイナリとして断るもの。
+    /// 中身で判定すると 30 万ファイルを読むことになるので拡張子で決める（拡張子の無いバイナリは候補に残る）。
+    /// svg・plist・rtf・key（Keynote だが PEM の秘密鍵もある）のようにテキストのことがあるものは入れない
+    static let unopenableExtensions: Set<String> = [
+        // 画像
+        "png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif", "avif", "ico", "icns", "psd", "ai", "xcf",
+        "sketch", "fig", "xd", "afdesign", "afphoto", "raw", "cr2", "cr3", "nef", "arw", "dng",
+        // 音声・動画
+        "mp3", "wav", "aac", "m4a", "flac", "ogg", "opus", "aif", "aiff", "caf", "mid", "midi",
+        "mp4", "m4v", "mov", "avi", "mkv", "webm", "wmv", "flv", "mpg", "mpeg", "3gp",
+        // 書類
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "numbers", "pages", "odt", "ods", "odp", "epub",
+        // 圧縮・配布物
+        "zip", "tar", "gz", "tgz", "bz2", "xz", "zst", "lz4", "7z", "rar", "dmg", "iso", "jar", "war", "ipa", "apk", "aab",
+        "deb", "rpm", "msi", "xip", "pkg",
+        // フォント
+        "ttf", "otf", "ttc", "woff", "woff2", "eot",
+        // 実行ファイル・ビルドの生成物
+        "o", "a", "so", "dylib", "exe", "dll", "bin", "class", "pyc", "pyo", "wasm", "node", "nib", "car", "swiftmodule", "mo",
+        // DB・データ
+        "sqlite", "sqlite3", "db", "db-wal", "db-shm", "realm", "parquet", "pkl", "pickle", "npy", "npz", "h5", "onnx", "pt",
+        "safetensors", "gguf",
+        // 3D・証明書
+        "blend", "fbx", "glb", "usdz", "p12", "pfx", "der", "mobileprovision", "keychain-db",
+    ]
+
+    /// Cmd+P の候補にするか（開けないと分かっているものは出さない）
+    static func isCandidate(name: String, size: Int) -> Bool {
+        size <= FileIO.maxSize && !unopenableExtensions.contains((name as NSString).pathExtension.lowercased())
+    }
 
     /// フォルダの中のファイルの絶対パス（登録フォルダ・テスト用）
     static func files(in folder: String) -> [String] {
@@ -82,14 +114,17 @@ enum FolderIndex {
         guard process.terminationStatus == 0 else { return nil } // git のリポジトリでない
         let root = (folder as NSString).standardizingPath
         // `/` で終わるのは追跡していない入れ子のリポジトリ、`/` の無いディレクトリはサブモジュール。
-        // 消したがまだコミットしていないファイルも返るので、在る「ファイル」だけ残す
-        return data.split(separator: 0).prefix(maxFiles).compactMap { String(data: Data($0), encoding: .utf8) }
+        // 消したがまだコミットしていないファイルも返るので、在る「ファイル」だけ残す。
+        // stat はシンボリックリンクの先を見る（リンクも開けるので候補に残す。大きさもリンク先で比べる）
+        let files = data.split(separator: 0).compactMap { String(data: Data($0), encoding: .utf8) }
             .filter { !$0.hasSuffix("/") }
             .map { root + "/" + $0 }
             .filter { path in
-                var isDir: ObjCBool = false
-                return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && !isDir.boolValue
+                var st = stat()
+                guard stat(path, &st) == 0, (st.st_mode & S_IFMT) == S_IFREG else { return false }
+                return isCandidate(name: path, size: Int(st.st_size))
             }
+        return Array(files.prefix(maxFiles))
     }
 
     /// 中に入らない「パッケージ」（Finder で 1 つのファイルに見えるディレクトリ）
@@ -127,7 +162,8 @@ enum FolderIndex {
                         result.append(contentsOf: listed.prefix(maxFiles - result.count))
                     }
                 }
-            } else if type == .typeRegular, name != ".DS_Store" {
+            } else if type == .typeRegular, name != ".DS_Store",
+                      isCandidate(name: name, size: (e.fileAttributes?[.size] as? NSNumber)?.intValue ?? 0) {
                 // シンボリックリンク（.typeSymbolicLink）はたどらないし、候補にもしない
                 result.append(path)
             }

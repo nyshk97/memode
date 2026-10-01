@@ -18,6 +18,7 @@
   Swift の `DocumentService.open(paths:)` を通る。登録フォルダ・最近使ったファイルは `<データ>/folders.json`・`recent.json`。
   Cmd+P の一覧（`FolderIndex`）は**ホームの下全部**（除く: ~/Library（CloudStorage 以外）・~/OrbStack・~/Applications・~/Music・~/Movies・~/Pictures・
   ホーム直下の隠しディレクトリ・どこにあっても node_modules / build / .git / .ssh 等）と、登録フォルダ全部（ホームの外や、ホームの一覧で除いている場所を探したいとき）。git のリポジトリの中は `git ls-files`（.gitignore に従う）。
+  開けないファイル（画像・PDF・圧縮ファイル等の拡張子 `FolderIndex.unopenableExtensions`、10MB を超えるもの）は一覧に入れない。中身は読まずに拡張子と大きさだけで決める。
   起動時に裏で作り、Cmd+P のときに 5 分より古ければ裏で作り直す。JS には変わったときだけパスの一覧を送る。
   git は `/usr/bin/git` でなく `xcrun --find git` の場所を使う（入口の方はアプリから初回に数秒かかる）。
   たどるときは `FileManager.enumerator(atPath:)` の相対パスを使う（URL でたどると /var と /private/var のように書き方がずれ、除く場所の判定が狂った）
