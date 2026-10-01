@@ -87,7 +87,7 @@ export class Workspace {
   onChange?: () => void;
   /** 未保存の変更があるファイルのタブを閉じようとしたとき（保存するか聞く） */
   onConfirmClose?: (doc: Doc, groupIndex: number) => void;
-  /** 最後のタブを閉じたとき（ウィンドウごと隠す。次に出すときは空のメモ 1 枚から） */
+  /** 最後のタブ（空のメモ）を閉じたとき（ウィンドウごと隠す。次に出すときは空のメモ 1 枚から） */
   onLastTabClosed?: () => void;
   /** タブバーを描き直したとき（掴んで動かせる場所を Swift に送り直す） */
   onRender?: () => void;
@@ -125,6 +125,11 @@ export class Workspace {
     const first = lines.find((l) => l.trim() !== "")?.trim();
     if (!first || !/[\p{L}\p{N}]/u.test(first)) return "scratch";
     return first.length > 30 ? first.slice(0, 30) + "…" : first;
+  }
+
+  /** 中身の無い（空白だけの）メモ */
+  private isEmptyMemo(doc: Doc): boolean {
+    return !doc.path && doc.model.getValue().trim() === "";
   }
 
   isDirty(doc: Doc): boolean {
@@ -206,7 +211,8 @@ export class Workspace {
     this.afterChange();
   }
 
-  /** タブを閉じる。最後の 1 枚なら、分割中はそのグループごと閉じ、分割していなければ空のメモを 1 枚作ってウィンドウを隠す。
+  /** タブを閉じる。最後の 1 枚なら、分割中はそのグループごと閉じ、分割していなければ空のメモを 1 枚作る。
+   *  閉じたのが空のメモだったときだけウィンドウを隠す（ファイルや中身のあるメモを閉じたら、空のメモを出して残す）。
    *  メモは確認なしで消える。未保存の変更があるファイルは、ほかのグループでも開いていなければ保存するか聞く */
   closeTab(groupIndex = this.activeGroup, docId?: number, force = false): void {
     const g = this.groups[groupIndex];
@@ -226,10 +232,10 @@ export class Workspace {
       if (this.groups.length > 1) {
         this.removeGroup(groupIndex);
       } else {
-        const doc = this.createDoc();
-        g.tabs.push(doc.id);
-        this.showDoc(g, doc.id);
-        lastClosed = true;
+        const scratch = this.createDoc();
+        g.tabs.push(scratch.id);
+        this.showDoc(g, scratch.id);
+        lastClosed = this.isEmptyMemo(doc);
       }
     } else if (g.active === id) {
       this.showDoc(g, g.tabs[Math.min(at, g.tabs.length - 1)]);

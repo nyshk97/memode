@@ -465,7 +465,27 @@ final class SelfTest {
         ws = await workspace()
         check("close_not_last_keeps_panel", panel.isVisible && tabs(ws.groups[0]).count == 1,
               "visible=\(panel.isVisible) tabs=\(tabs(ws.groups[0]).count)")
-        // 最後の 1 枚を閉じると、ウィンドウごと隠れて空のメモが 1 枚残る（使い捨てメモは確認なしで消える）
+        // 最後の 1 枚が中身のあるメモなら、確認なしで消えて空のメモが出る（ウィンドウは残る）
+        await key(Key.w, [.command], chars: "w")
+        await sleep(0.3)
+        ws = await workspace()
+        check("close_last_memo_opens_scratch", panel.isVisible && tabs(ws.groups[0]).count == 1 && ws.value == "" && ws.docCount == 1,
+              "visible=\(panel.isVisible) tabs=\(tabs(ws.groups[0]).count) docs=\(ws.docCount) value=\(ws.value.count)")
+        // 最後の 1 枚がファイルでも、空のメモが出る
+        let dir = dataDir.appendingPathComponent("files")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let last = dir.appendingPathComponent("close-last.txt").path
+        try? "last\n".write(toFile: last, atomically: true, encoding: .utf8)
+        docs.openPathOverride = last
+        await key(Key.o, [.command], chars: "o")
+        await sleep(0.4)
+        let opened = (await activeTab())["title"] as? String
+        await key(Key.w, [.command], chars: "w")
+        await sleep(0.3)
+        ws = await workspace()
+        check("close_last_file_opens_scratch", opened == "close-last.txt" && panel.isVisible && tabs(ws.groups[0]).count == 1 && ws.value == "",
+              "opened=\(String(describing: opened)) visible=\(panel.isVisible) tabs=\(tabs(ws.groups[0]).count) value=\(ws.value.count)")
+        // 空のメモを閉じると、ウィンドウごと隠れて空のメモが 1 枚残る
         await key(Key.w, [.command], chars: "w")
         await sleep(0.3)
         ws = await workspace()
