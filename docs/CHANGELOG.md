@@ -44,6 +44,8 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-01
+
 ### ✨ Added
 - 左 Shift のダブルタップで出し入れするポップアップのエディタ（隠しても続きから書ける）
 - タブと左右分割、主要な言語のシンタックスハイライト
