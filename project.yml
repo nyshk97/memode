@@ -77,6 +77,14 @@ targets:
             CFBundleURLSchemes:
               - $(MEMODE_URL_SCHEME)
         MemodeURLScheme: $(MEMODE_URL_SCHEME)
+        # テキストのファイルを開ける、という宣言（無いと duti で既定のアプリにしても macOS が受け付けない）。
+        # .md・.json・.csv・ソースコードはどれも public.text に従う。Alternate なので、宣言しただけでは既定を奪わない
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Text
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - public.text
         # Sparkle。アップデータの起動は #if !DEBUG で止め、feed も Release にだけ入れる二重の防御
         SUFeedURL: $(MEMODE_SU_FEED_URL)
         # 常駐して存在を忘れるアプリなので自動で確かめる（起動時と 24 時間ごと）。同意のダイアログは出さない

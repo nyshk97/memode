@@ -76,8 +76,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         documents?.terminateRequested() ?? .terminateNow
     }
 
+    /// `memode://`（memode コマンド）と、Finder のダブルクリック・「このアプリケーションで開く」で届く file:// の両方がここに来る
     func application(_ application: NSApplication, open urls: [URL]) {
-        for url in urls {
+        let files = urls.filter(\.isFileURL)
+        if !files.isEmpty {
+            Log.write("file.open_from_finder", files.map(\.path).joined(separator: " "))
+            documents?.open(paths: files.map(\.path))
+        }
+        for url in urls where !url.isFileURL {
             Log.write("url.open", url.absoluteString)
             documents?.openFromURL(url)
         }

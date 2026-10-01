@@ -105,6 +105,20 @@ grep -E 'url.open|file\.(opened|open_new|open_failed)' ~/Library/Logs/memode-dev
 
 `file.opened ...日本語 #メモ & q?.txt` と `file.open_new ...まだ無い.md` が出れば通っている。
 
+## Finder から開く（file:// で届く経路）
+
+`open -b` は Finder のダブルクリックと同じく file:// の URL で渡す。既定のアプリを変えずに確かめられる。
+
+```sh
+D=$(mktemp -d); printf '# x\n' > "$D/a.md"; printf '{}\n' > "$D/b.json"
+open -g build/Build/Products/Debug/Memode-dev.app --args --data-dir "$D"; sleep 2.5
+open -b local.nyshk97.memode.dev "$D/a.md" "$D/b.json"; sleep 1
+grep -E 'file\.(open_from_finder|opened)' ~/Library/Logs/memode-dev/memode.log | tail -3
+```
+
+`file.opened` が 2 件出れば通っている（`url.open file://...` だけで止まっていたら file:// を memode:// と同じ扱いにしている）。
+既定のアプリの切り替え（duti）は macOS が確認を挟み、Claude Code から叩くと `userCanceledErr` で黙って失敗する。自分のターミナルで叩く。
+
 ## ユニットテスト
 
 ```sh
