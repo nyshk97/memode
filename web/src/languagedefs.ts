@@ -60,7 +60,16 @@ monaco.languages.setMonarchTokensProvider("diff", {
   },
 });
 
-/** 既定のテーマ（vs・vs-dark）に、diff の追加行・削除行の色だけ足したもの */
+/** 背景は CSS の板（.editor-host）が塗るので、エディタ自身は透明にする */
+const transparentChrome = {
+  "editor.background": "#00000000",
+  "editorGutter.background": "#00000000",
+  "editor.lineHighlightBorder": "#00000000",
+  "scrollbar.shadow": "#00000000",
+  "editorOverviewRuler.border": "#00000000",
+};
+
+/** 既定のテーマ（vs・vs-dark）に、diff の追加行・削除行の色と、板に合わせた地の色を足したもの */
 export const themes = { light: "memode-light", dark: "memode-dark" };
 monaco.editor.defineTheme(themes.light, {
   base: "vs",
@@ -69,7 +78,13 @@ monaco.editor.defineTheme(themes.light, {
     { token: "inserted.diff", foreground: "22863A" },
     { token: "deleted.diff", foreground: "B31D28" },
   ],
-  colors: {},
+  colors: {
+    ...transparentChrome,
+    "editor.lineHighlightBackground": "#0000000a",
+    "editorLineNumber.foreground": "#00000038",
+    "editorLineNumber.activeForeground": "#00000099",
+    "editorCursor.foreground": "#2f6bff",
+  },
 });
 monaco.editor.defineTheme(themes.dark, {
   base: "vs-dark",
@@ -78,5 +93,11 @@ monaco.editor.defineTheme(themes.dark, {
     { token: "inserted.diff", foreground: "81B88B" },
     { token: "deleted.diff", foreground: "F14C4C" },
   ],
-  colors: {},
+  colors: {
+    ...transparentChrome,
+    "editor.lineHighlightBackground": "#ffffff0b",
+    "editorLineNumber.foreground": "#ffffff33",
+    "editorLineNumber.activeForeground": "#ffffffa6",
+    "editorCursor.foreground": "#7aa8ff",
+  },
 });

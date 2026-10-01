@@ -31,6 +31,8 @@ final class PanelController: NSObject, NSWindowDelegate {
     private(set) var style: PanelStyle
     let webView: EditorWebView
     let bridge: EditorBridge
+    /// 後ろを透かしてぼかす下地。WKWebView はこの上に載せ、ページ側は半透明の色だけ塗る
+    private let backdrop = PanelController.makeBackdrop()
 
     var isVisible: Bool { panel.isVisible }
     /// 出す直前に前面にいたアプリ（activating のとき、ダブルタップで隠したらここへ戻す）
@@ -54,7 +56,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         webView = EditorWebViewFactory.make(bridge: bridge)
         panel = Self.makePanel(style: style)
         super.init()
-        panel.contentView = webView
+        webView.frame = backdrop.bounds
+        webView.autoresizingMask = [.width, .height]
+        backdrop.addSubview(webView)
+        panel.contentView = backdrop
         panel.delegate = self
         bridge.onDragRegions = { [weak self] rects in self?.panel.dragRegions = rects }
     }
@@ -66,6 +71,9 @@ final class PanelController: NSObject, NSWindowDelegate {
                                styleMask: mask, backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        // 背景は backdrop（NSVisualEffectView）が描く
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
         for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             panel.standardWindowButton(button)?.isHidden = true
         }
@@ -79,6 +87,16 @@ final class PanelController: NSObject, NSWindowDelegate {
         return panel
     }
 
+    private static func makeBackdrop() -> NSVisualEffectView {
+        let view = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        // nonactivating のパネルはアプリがアクティブにならないので、既定（followsWindowActiveState）だと
+        // 非アクティブの灰色の見た目になる
+        view.state = .active
+        return view
+    }
+
     /// 方式を切り替える（dev 版のメニューから）。styleMask の nonactivatingPanel は
     /// 作った後に変えると効かないことがあるので、パネルごと作り直して WKWebView を移す
     func switchStyle(to newStyle: PanelStyle) {
@@ -90,7 +108,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView = nil
         style = newStyle
         panel = Self.makePanel(style: newStyle)
-        panel.contentView = webView
+        panel.contentView = backdrop
         panel.delegate = self
         panel.dragRegions = regions
         panel.setFrame(frame, display: false)

@@ -10,6 +10,9 @@
   `memode-editor://app/` という独自の URL スキームで読む（`file://` だと Monaco の worker が動かない）
 - Swift ⇄ JS のやり取りは `web/src/bridge.ts`（`EditorHost`）だけを通す。エディタは Monaco に決定済み（日本語入力をユーザーが確認。2026-10-01）
 - パネルは nonactivating（前面のアプリを切り替えずにキー入力だけ受ける）。activating への切り替えは dev 版のメニューに残してある
+- 見た目は半透明（2026-10-01 にモックから「G. Layer」を選んだ）。パネルの下地は NSVisualEffectView（`.hudWindow`・`state = .active`。
+  nonactivating なので既定のままだと非アクティブの灰色になる）で、WKWebView はその上に載る。ページは枠に薄い色だけ塗り、
+  文字を書く面（`.editor-host`）だけ濃い板にする。Monaco のテーマは背景を透明にしてある（`languagedefs.ts`）
 - `web/src/workspace.ts`: タブ（文書 = Monaco の model）と左右分割（グループ。最大 2 つ）。同じ文書を左右で開くと model を共有する。
   `quickpick.ts` は上に出る絞り込み付きの一覧（言語の選択・Cmd+P）
 - 保存・セッション: 中身とタブの状態は JS（`web/src/files.ts`・`session.ts`）、ファイルの読み書き・確認のダイアログ・`session.json` は

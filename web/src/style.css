@@ -1,36 +1,47 @@
-/* 色は VS Code の既定のテーマ（Dark Modern / Light Modern）に寄せる */
+/* ウィンドウの下地は Swift の NSVisualEffectView（後ろを透かしてぼかす）。ページはその上に半透明の色を塗る。
+   枠（タブバー・ステータスバー）はよく透け、文字を書く面（.editor-host）だけ濃い板を浮かせる */
 :root {
-  --bg: #ffffff;
-  --tabbar-bg: #f3f3f3;
-  --tab-bg: #ececec;
-  --tab-fg: #616161;
-  --tab-active-bg: #ffffff;
-  --tab-active-fg: #333333;
-  --tab-active-border: #005fb8;
-  --border: #e5e5e5;
-  --status-bg: #f3f3f3;
-  --status-fg: #616161;
-  --pick-bg: #ffffff;
-  --pick-selected: #e8e8e8;
-  --pick-detail: #8a8a8a;
-  --pick-shadow: rgba(0, 0, 0, 0.16);
+  --frame-bg: rgb(40 40 50 / 0.12);
+  --sheet-bg: rgb(17 17 22 / 0.78);
+  --sheet-bg-inactive: rgb(17 17 22 / 0.62);
+  --sheet-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07), 0 6px 20px rgb(0 0 0 / 0.25);
+  --fg: #e6e6ec;
+  --tab-fg: rgb(255 255 255 / 0.55);
+  --tab-hover-bg: rgb(255 255 255 / 0.06);
+  --tab-active-bg: rgb(255 255 255 / 0.14);
+  --tab-active-fg: #fff;
+  --tab-active-shadow: inset 0 0 0 0.5px rgb(255 255 255 / 0.14), 0 1px 3px rgb(0 0 0 / 0.2);
+  --line: rgb(255 255 255 / 0.07);
+  --line-strong: rgb(255 255 255 / 0.12);
+  --status-fg: rgb(255 255 255 / 0.45);
+  --chip-bg: rgb(255 255 255 / 0.09);
+  --accent: #7aa8ff;
+  --pick-bg: rgb(46 46 56 / 0.86);
+  --pick-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.15), 0 24px 60px rgb(0 0 0 / 0.5);
+  --pick-selected: #3b6dff;
+  --pick-detail: rgb(255 255 255 / 0.45);
 }
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --bg: #1e1e1e;
-    --tabbar-bg: #252526;
-    --tab-bg: #2d2d2d;
-    --tab-fg: #969696;
-    --tab-active-bg: #1e1e1e;
-    --tab-active-fg: #ffffff;
-    --tab-active-border: #0078d4;
-    --border: #2b2b2b;
-    --status-bg: #181818;
-    --status-fg: #a0a0a0;
-    --pick-bg: #252526;
-    --pick-selected: #04395e;
-    --pick-detail: #8a8a8a;
-    --pick-shadow: rgba(0, 0, 0, 0.5);
+    --frame-bg: rgb(236 236 244 / 0.5);
+    --sheet-bg: rgb(255 255 255 / 0.9);
+    --sheet-bg-inactive: rgb(255 255 255 / 0.72);
+    --sheet-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 6px 20px rgb(0 0 0 / 0.08);
+    --fg: #1f1f26;
+    --tab-fg: rgb(0 0 0 / 0.5);
+    --tab-hover-bg: rgb(0 0 0 / 0.04);
+    --tab-active-bg: rgb(255 255 255 / 0.8);
+    --tab-active-fg: #111;
+    --tab-active-shadow: 0 0 0 0.5px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.08);
+    --line: rgb(0 0 0 / 0.07);
+    --line-strong: rgb(0 0 0 / 0.1);
+    --status-fg: rgb(0 0 0 / 0.45);
+    --chip-bg: rgb(0 0 0 / 0.06);
+    --accent: #2f6bff;
+    --pick-bg: rgb(250 250 253 / 0.9);
+    --pick-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.7), 0 0 0 0.5px rgb(0 0 0 / 0.1), 0 24px 60px rgb(0 0 0 / 0.25);
+    --pick-selected: #2f6bff;
+    --pick-detail: rgb(0 0 0 / 0.45);
   }
 }
 
@@ -38,10 +49,14 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--frame-bg);
+  color: var(--fg);
   font: 12px -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
   -webkit-user-select: none;
   user-select: none;
+}
+html {
+  background: transparent;
 }
 body {
   display: flex;
@@ -59,19 +74,16 @@ body {
   flex-direction: column;
   min-width: 0;
 }
-#groups.split .group + .group {
-  border-left: 1px solid var(--border);
-}
-/* 分割中、フォーカスの無い側は少し沈める */
-#groups.split .group:not(.active) .tab.active {
-  border-top-color: transparent;
-}
 
+/* タブバーはウィンドウの端まで伸ばす（タブの右の空きを掴んで動かすので）。余白は板の側に付ける */
 .tabbar {
   display: flex;
-  height: 35px;
+  align-items: center;
+  gap: 3px;
+  height: 42px;
   flex: none;
-  background: var(--tabbar-bg);
+  padding: 4px 12px 0;
+  box-sizing: border-box;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -79,38 +91,58 @@ body {
 .tabbar::-webkit-scrollbar {
   display: none;
 }
-/* 角丸の内側から始める */
-.group:first-child .tabbar {
-  padding-left: 10px;
+#groups.split .group + .group .tabbar {
+  padding-left: 8px;
 }
 .tab {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
   max-width: 220px;
-  padding: 0 6px 0 12px;
-  background: var(--tab-bg);
+  height: 28px;
+  padding: 0 5px 0 10px;
+  border-radius: 8px;
   color: var(--tab-fg);
-  border-top: 1px solid transparent;
-  border-right: 1px solid var(--border);
   cursor: default;
   white-space: nowrap;
+}
+.tab:hover {
+  background: var(--tab-hover-bg);
 }
 .tab.active {
   background: var(--tab-active-bg);
   color: var(--tab-active-fg);
-  border-top-color: var(--tab-active-border);
+  box-shadow: var(--tab-active-shadow);
+}
+/* 分割中、フォーカスの無い側は枠だけにして沈める */
+#groups.split .group:not(.active) .tab.active {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--tab-fg);
+}
+/* ファイルの種類の色（--kind は workspace.ts が言語ごとに付ける） */
+.tab .kind {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--kind, #9a9aa6);
+  box-shadow: 0 0 6px var(--kind, transparent);
 }
 .tab .label {
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .tab .close {
+  flex: none;
+  display: grid;
+  place-items: center;
   width: 18px;
   height: 18px;
-  line-height: 18px;
-  text-align: center;
-  border-radius: 4px;
+  border-radius: 5px;
+  font-size: 14px;
+  line-height: 1;
   visibility: hidden;
 }
 .tab.active .close,
@@ -118,90 +150,144 @@ body {
   visibility: visible;
 }
 .tab .close:hover {
-  background: rgba(128, 128, 128, 0.25);
+  background: rgb(128 128 128 / 0.25);
+}
+/* 未保存の変更があるときは × の場所に点を出す（タブに乗せると × に戻る） */
+.tab.dirty .close {
+  visibility: visible;
+  font-size: 0;
+}
+.tab.dirty .close::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.tab.dirty .close:hover {
+  font-size: 14px;
+}
+.tab.dirty .close:hover::before {
+  display: none;
 }
 
 .editor-host {
   flex: 1;
   min-height: 0;
+  margin: 2px 7px 0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sheet-bg);
+  box-shadow: var(--sheet-shadow);
+}
+#groups.split .group:first-child .editor-host {
+  margin-right: 3.5px;
+}
+#groups.split .group + .group .editor-host {
+  margin-left: 3.5px;
+}
+#groups.split .group:not(.active) .editor-host {
+  background: var(--sheet-bg-inactive);
 }
 
 #statusbar {
   flex: none;
   display: flex;
   align-items: center;
-  height: 22px;
-  padding: 0 14px;
-  background: var(--status-bg);
+  gap: 2px;
+  height: 30px;
+  padding: 0 12px;
   color: var(--status-fg);
-  border-top: 1px solid var(--border);
+  font-size: 11px;
 }
 #statusbar .spacer {
   flex: 1;
 }
-#statusbar .clickable {
-  padding: 0 6px;
-  border-radius: 3px;
-}
-#statusbar .clickable:hover {
-  background: rgba(128, 128, 128, 0.2);
-}
-#status-reset-frame {
+#statusbar > span:not(.spacer) {
   display: flex;
   align-items: center;
-  height: 18px;
-}
-#status-version:not(.clickable) {
+  gap: 5px;
+  height: 20px;
   padding: 0 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+#statusbar .clickable:hover {
+  background: var(--chip-bg);
+}
+#status-language {
+  background: var(--chip-bg);
+  color: var(--tab-active-fg);
+  margin: 0 4px;
+  padding: 0 9px 0 8px !important;
+  border-radius: 10px !important;
+}
+#status-language::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--kind, var(--accent));
 }
 #status-version.update {
-  color: var(--tab-active-border);
+  color: var(--accent);
   font-weight: 600;
 }
 
 .quickpick {
   position: fixed;
-  top: 44px;
+  top: 52px;
   left: 50%;
   transform: translateX(-50%);
-  width: min(600px, 80vw);
-  background: var(--pick-bg);
-  border-radius: 6px;
-  box-shadow: 0 4px 20px var(--pick-shadow);
+  width: min(560px, 78vw);
+  box-sizing: border-box;
   padding: 6px;
+  border-radius: 14px;
+  background: var(--pick-bg);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow: var(--pick-shadow);
   z-index: 100;
 }
 .quickpick input {
+  display: block;
   width: 100%;
   box-sizing: border-box;
   font: inherit;
-  font-size: 13px;
-  padding: 5px 8px;
-  border: 1px solid var(--tab-active-border);
-  border-radius: 3px;
-  background: var(--bg);
+  font-size: 17px;
+  padding: 9px 12px 11px;
+  margin-bottom: 6px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
   color: var(--tab-active-fg);
   outline: none;
 }
 .quickpick-list {
   max-height: 360px;
   overflow-y: auto;
-  margin-top: 4px;
 }
 .quickpick-item {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 3px 8px;
-  border-radius: 3px;
-  color: var(--tab-active-fg);
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--fg);
   font-size: 13px;
+  white-space: nowrap;
 }
 .quickpick-item.selected {
   background: var(--pick-selected);
+  color: #fff;
 }
 .quickpick-item .detail {
   color: var(--pick-detail);
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.quickpick-item.selected .detail {
+  color: rgb(255 255 255 / 0.8);
 }

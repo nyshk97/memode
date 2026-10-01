@@ -33,10 +33,39 @@ const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   automaticLayout: true,
   fontSize: 13,
   minimap: { enabled: false },
+  padding: { top: 8 },
   scrollBeyondLastLine: false,
   renderWhitespace: "selection",
   unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false },
 };
+
+/** タブとステータスバーの小さな点の色（ファイルの種類の目印）。無い言語は灰色 */
+const kindColors: Record<string, string> = {
+  markdown: "#5ea8ff",
+  plaintext: "#b49bff",
+  shell: "#7fdfa2",
+  json: "#f0b45e",
+  ini: "#f0b45e",
+  yaml: "#f0b45e",
+  xml: "#f0b45e",
+  javascript: "#f5d76e",
+  typescript: "#4f9dff",
+  python: "#6fb7ff",
+  ruby: "#ff6b6b",
+  swift: "#ff8a4c",
+  go: "#5fd3e8",
+  rust: "#e8916a",
+  html: "#ff7a59",
+  css: "#c084fc",
+  scss: "#f472b6",
+  sql: "#8ec5ff",
+  diff: "#9be37a",
+};
+function setKindColor(el: HTMLElement, language: string): void {
+  const color = kindColors[language];
+  if (color) el.style.setProperty("--kind", color);
+  else el.style.removeProperty("--kind");
+}
 
 export class Workspace {
   private docs = new Map<number, Doc>();
@@ -416,11 +445,14 @@ export class Workspace {
         ...g.tabs.map((id) => {
           const doc = this.docs.get(id)!;
           const tab = document.createElement("div");
-          tab.className = "tab" + (id === g.active ? " active" : "");
+          tab.className = "tab" + (id === g.active ? " active" : "") + (this.isDirty(doc) ? " dirty" : "");
           tab.title = doc.path ?? this.title(doc);
+          const kind = document.createElement("span");
+          kind.className = "kind";
+          setKindColor(kind, doc.model.getLanguageId());
           const label = document.createElement("span");
           label.className = "label";
-          label.textContent = (this.isDirty(doc) ? "● " : "") + this.title(doc);
+          label.textContent = this.title(doc);
           const close = document.createElement("span");
           close.className = "close";
           close.textContent = "×";
@@ -429,7 +461,7 @@ export class Workspace {
             e.stopPropagation();
             this.closeTab(this.groups.indexOf(g), id);
           });
-          tab.append(label, close);
+          tab.append(kind, label, close);
           tab.addEventListener("mousedown", (e) => {
             e.preventDefault();
             const index = this.groups.indexOf(g);
@@ -450,6 +482,7 @@ export class Workspace {
   private renderStatus(): void {
     const doc = this.activeDoc;
     this.statusbar.language.textContent = languageName(doc.model.getLanguageId());
+    setKindColor(this.statusbar.language, doc.model.getLanguageId());
     const pos = this.activeEditor.getPosition();
     const cursors = this.activeEditor.getSelections()?.length ?? 1;
     this.statusbar.position.textContent =
