@@ -11,7 +11,7 @@ settings:
     SWIFT_VERSION: "5.0"
     ARCHS: arm64
     # バージョンはここ 1 箇所で管理する（Info.plist の 2 つのキーはここから流す）
-    MARKETING_VERSION: 0.1.3
+    MARKETING_VERSION: 0.1.4
     CURRENT_PROJECT_VERSION: "$(MARKETING_VERSION)"
 targets:
   memode:
