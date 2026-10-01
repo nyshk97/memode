@@ -214,6 +214,23 @@ final class SelfTest {
         check("navigation_blocked", stillAlive && panel.webView.url?.scheme == EditorSchemeHandler.scheme,
               "url=\(panel.webView.url?.absoluteString ?? "nil") alive=\(stillAlive)")
 
+        // 9c. ステータスバーの版の表示。dev 版は「dev」で押せない。新しい版があると「vX.Y.Z に更新」になり、押すとポップアップを隠す
+        let devVersion = (await panel.bridge.debugState())?["statusVersion"] as? [String: Any]
+        check("status_version_dev", devVersion?["text"] as? String == "dev" && devVersion?["clickable"] as? Bool == false,
+              "statusVersion=\(String(describing: devVersion))")
+        panel.bridge.send(["type": "appInfo", "version": "0.1.1", "dev": false, "update": "9.9.9"])
+        await sleep(0.3)
+        let updateVersion = (await panel.bridge.debugState())?["statusVersion"] as? [String: Any]
+        check("status_version_update", updateVersion?["text"] as? String == "v9.9.9 に更新" && updateVersion?["clickable"] as? Bool == true,
+              "statusVersion=\(String(describing: updateVersion))")
+        _ = try? await panel.webView.evaluateJavaScript("document.getElementById('status-version').click(); true")
+        await sleep(0.5)
+        check("status_version_click_hides", !panel.isVisible && app.menuActionLog.last == "check_for_updates",
+              "visible=\(panel.isVisible) last=\(app.menuActionLog.last ?? "nil")")
+        panel.bridge.send(["type": "appInfo", "version": AppInfo.version, "dev": true, "update": NSNull()])
+        panel.show()
+        await sleep(0.8)
+
         // 10. 左 Shift のダブルタップで出し入れする（監視から届いたイベントと同じ入口に流す）
         panel.hide(reason: .toggle)
         await sleep(0.3)

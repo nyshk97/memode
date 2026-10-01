@@ -5,6 +5,8 @@
 export type FromSwift =
   | { type: "focus" }
   | { type: "setContent"; value: string; language?: string }
+  /** 今の版と、見つかった新しい版（ステータスバーの右端に出す） */
+  | { type: "appInfo"; version: string; dev: boolean; update: string | null }
   /** メニューの操作（new_tab・close_tab・select_tab・next_tab・previous_tab・toggle_split・choose_language・save・save_as） */
   | { type: "command"; name: string; index?: number }
   /** 保存・セッション・ファイルまわり（main.ts の handleFileMessage が受ける） */
@@ -33,12 +35,15 @@ export interface DebugState {
   tokenClassCount: number;
   /** Monaco の worker を読み込めたか */
   workerLoaded: boolean;
+  /** ステータスバーの版の表示 */
+  statusVersion: { text: string; clickable: boolean };
 }
 
 export interface EditorHost {
   focus(): void;
   setContent(value: string, language?: string): void;
   command(name: string, index?: number): void;
+  setAppInfo(info: Extract<FromSwift, { type: "appInfo" }>): void;
   handleFileMessage(msg: Extract<FromSwift, { [key: string]: unknown }>): void;
   debugState(): DebugState;
 }
@@ -72,6 +77,9 @@ export function install(host: EditorHost): void {
           break;
         case "command":
           host.command(msg.name, msg.index);
+          break;
+        case "appInfo":
+          host.setAppInfo(msg);
           break;
         default:
           host.handleFileMessage(msg as Extract<FromSwift, { [key: string]: unknown }>);

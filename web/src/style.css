@@ -146,6 +146,13 @@ body {
 #statusbar .clickable:hover {
   background: rgba(128, 128, 128, 0.2);
 }
+#status-version:not(.clickable) {
+  padding: 0 6px;
+}
+#status-version.update {
+  color: var(--tab-active-border);
+  font-weight: 600;
+}
 
 .quickpick {
   position: fixed;

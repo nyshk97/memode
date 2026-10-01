@@ -19,6 +19,8 @@ enum MainMenu {
         case toggleSplit = "toggle_split"
         case chooseLanguage = "choose_language"
         case registerFolder = "register_folder"
+        /// ステータスバーの版の表示を押したとき（メニューには置かない）
+        case checkForUpdates = "check_for_updates"
     }
 
     static func build(target: AnyObject, action: Selector) -> NSMenu {

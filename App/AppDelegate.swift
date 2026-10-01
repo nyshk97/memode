@@ -10,15 +10,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var documents: DocumentService!
     private var statusItem: NSStatusItem!
     #if !DEBUG
-    /// アプリ内アップデート（dev 版では動かさない。feed も Release にしか無い）
-    private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    /// アプリ内アップデート（dev 版では動かさない。feed も Release にしか無い）。delegate に self を渡すので lazy にして、
+    /// applicationDidFinishLaunching で作る
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     @objc private func checkForUpdates(_ sender: Any?) {
         NSApp.activate()
         updaterController.checkForUpdates(sender)
     }
     #endif
+
+    /// 見つかった新しい版（ステータスバーに「vX.Y.Z に更新」と出す）
+    private var availableUpdate: String?
 
     /// 自走の検証（dev 版）で、メニューの操作が届いたかを数える
     private(set) var menuActionLog: [String] = []
@@ -50,10 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         documents.onFoldersChanged = { [weak self] in self?.rebuildStatusMenu() }
         documents.restore()
         documents.refreshIndex(force: true)
+        sendAppInfo()
         Log.write("app.data_dir", AppInfo.dataDirectory.path)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if !DEBUG
+        _ = updaterController
+        #endif
         setUpStatusItem()
         shiftTapMonitor = ShiftTapMonitor { [weak self] in self?.panelController.toggle() }
         shiftTapMonitor.start()
@@ -95,7 +103,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             documents.quickOpen()
         case .registerFolder:
             documents.chooseFolderToRegister()
+        case .checkForUpdates:
+            panelController.hide(reason: .checkForUpdates)
+            #if !DEBUG
+            checkForUpdates(nil)
+            #endif
         }
+    }
+
+    /// ステータスバーの版の表示（JS の main.ts）に、今の版と見つかった新しい版を渡す
+    private func sendAppInfo() {
+        panelController.bridge.send([
+            "type": "appInfo", "version": AppInfo.version, "dev": AppInfo.isDev,
+            "update": availableUpdate ?? NSNull(),
+        ])
     }
 
     /// Phase 2 ではパネルの前後関係を確かめるために出すだけ（開く処理は Phase 6）
@@ -273,3 +294,19 @@ extension AppDelegate {
         }
     }
 }
+
+#if !DEBUG
+extension AppDelegate: SPUUpdaterDelegate {
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        availableUpdate = item.displayVersionString
+        Log.write("update.found", item.displayVersionString)
+        sendAppInfo()
+    }
+
+    func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+        guard availableUpdate != nil else { return }
+        availableUpdate = nil
+        sendAppInfo()
+    }
+}
+#endif

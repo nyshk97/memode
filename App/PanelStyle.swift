@@ -30,6 +30,8 @@ enum HideReason: String {
     case toggle
     /// フォーカスがアプリの外に移った（外をクリックした等）
     case focusLost
+    /// アップデートの確認の画面を出す（ポップアップは .floating なので、出したままだと画面が後ろに隠れる）
+    case checkForUpdates
 }
 
 /// 隠す・フォーカスを戻すの決まり（ユニットテストする）

@@ -45,6 +45,13 @@ const workspace = new Workspace(
 
 const files = new FileController(workspace);
 
+// ステータスバーの右端の版。押すとアップデートを確認する（dev 版は Sparkle が無いので押せない）
+const statusVersion = document.getElementById("status-version")!;
+let canCheckForUpdates = false;
+statusVersion.addEventListener("click", () => {
+  if (canCheckForUpdates) post({ type: "action", action: "check_for_updates" });
+});
+
 const host: EditorHost = {
   focus: () => workspace.focus(),
   setContent(value, language) {
@@ -76,6 +83,13 @@ const host: EditorHost = {
         post({ type: "log", event: "command.unknown", detail: name });
     }
   },
+  setAppInfo({ version, dev, update }) {
+    canCheckForUpdates = !dev;
+    statusVersion.textContent = dev ? "dev" : update ? `v${update} に更新` : `v${version}`;
+    statusVersion.title = dev ? `dev 版（v${version}）はアップデートしない` : update ? `v${version} → v${update}` : "アップデートを確認";
+    statusVersion.classList.toggle("clickable", !dev);
+    statusVersion.classList.toggle("update", !dev && !!update);
+  },
   handleFileMessage: (msg) => files.handle(msg),
   debugState() {
     const editor = workspace.activeEditor;
@@ -91,6 +105,7 @@ const host: EditorHost = {
         Array.from(document.querySelectorAll(".group.active .view-line span span")).map((el) => el.className),
       ).size,
       workerLoaded: workerAlive,
+      statusVersion: { text: statusVersion.textContent ?? "", clickable: canCheckForUpdates },
     };
   },
 };
