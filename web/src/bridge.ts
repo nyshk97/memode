@@ -4,6 +4,8 @@
 
 export type FromSwift =
   | { type: "focus" }
+  /** 隠れていたパネルを出したとき（中身の出現アニメーション。ウィンドウのフェードは Swift 側） */
+  | { type: "appear" }
   | { type: "setContent"; value: string; language?: string }
   /** 今の版と、見つかった新しい版（ステータスバーの右端に出す） */
   | { type: "appInfo"; version: string; dev: boolean; update: string | null }
@@ -45,6 +47,7 @@ export interface DebugState {
 
 export interface EditorHost {
   focus(): void;
+  appear(): void;
   setContent(value: string, language?: string): void;
   command(name: string, index?: number): void;
   setAppInfo(info: Extract<FromSwift, { type: "appInfo" }>): void;
@@ -78,6 +81,9 @@ export function install(host: EditorHost): void {
       switch (msg.type) {
         case "focus":
           host.focus();
+          break;
+        case "appear":
+          host.appear();
           break;
         case "setContent":
           host.setContent(msg.value, msg.language);

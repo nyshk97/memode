@@ -124,12 +124,23 @@ final class PanelController: NSObject, NSWindowDelegate {
         let front = NSWorkspace.shared.frontmostApplication
         previousApp = front?.processIdentifier == ProcessInfo.processInfo.processIdentifier ? previousApp : front
         // 出ているときは動かさない（別の画面にマウスがあっても、今の場所のまま前に出すだけ）
-        if !panel.isVisible { applyFrame(frame(on: Self.mouseScreen())) }
+        let wasHidden = !panel.isVisible
+        if wasHidden {
+            applyFrame(frame(on: Self.mouseScreen()))
+            panel.alphaValue = 0
+        }
         if style == .activating {
             // macOS 14 からの協調型のアクティベーションでは activate() だけだと断られることがある
             NSApp.activate(ignoringOtherApps: true)
         }
         panel.makeKeyAndOrderFront(nil)
+        if wasHidden {
+            bridge.send(["type": "appear"])
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.16
+                panel.animator().alphaValue = 1
+            }
+        }
         focusEditor()
         onShow?()
         Log.write("panel.show", "style=\(style.rawValue) frame=\(NSStringFromRect(panel.frame))")

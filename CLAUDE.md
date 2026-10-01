@@ -35,7 +35,8 @@
 - メニューの操作は Swift の `AppDelegate.perform` を通り、タブと分割に関わるものは `{type: "command"}` として JS に送る
 - `web/src/monaco.generated.ts` は `web/scripts/gen-monaco-entry.mjs` が毎回作る（言語サービスを除いた Monaco の読み込み口。gitignore）
 - 言語: `languages.ts` の `languageForPath` が、Monaco の登録表 → 追加の表（`.zshrc`→shell・`.plist`→xml・`.toml`→ini・`.vue`→html 等）→ 1 行目の shebang の順で決める。
-  JSON は言語サービスごと外したので登録されておらず、`languagedefs.ts` で色付けの部品（ワーカー不要）だけ借りて登録し直している。ignore・diff も同じファイルに Monarch で書いた
+  JSON は言語サービスごと外したので登録されておらず、`languagedefs.ts` で色付けの部品（ワーカー不要）だけ借りて登録し直している。ignore・diff も同じファイルに Monarch で書いた。
+  Markdown は Monaco の文法を読み込んで、見出し・リストの記号・チェックボックス・済みの行・インラインコードを別のトークンに分けたものを登録し直している（文字の色は同じファイルの `syntax()`）
 - アプリのショートカットは `App/MainMenu.swift` のメインメニューに置く（Monaco 側でこれらのキーを使わない）。
   Ctrl+Tab だけはメニューのキーとして届かないので、`bridge.ts` で拾って `action` として Swift に回す
 

@@ -65,6 +65,11 @@ statusVersion.addEventListener("click", () => {
 
 const host: EditorHost = {
   focus: () => workspace.focus(),
+  appear() {
+    document.body.classList.remove("appear");
+    void document.body.offsetWidth;
+    document.body.classList.add("appear");
+  },
   setContent(value, language) {
     const model = workspace.activeDoc.model;
     model.setValue(value);

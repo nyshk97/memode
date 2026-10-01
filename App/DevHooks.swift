@@ -206,6 +206,10 @@ final class SelfTest {
         let afterCursors = after?["cursors"] as? [[String: Int]]
         check("refocus_after_show", (after?["focused"] as? Bool) == true && before != nil && afterCursors == before,
               "focused=\(String(describing: after?["focused"])) before=\(String(describing: before)) after=\(String(describing: afterCursors))")
+        // 出すときのフェードイン（alpha 0 → 1）が終わって見えている。中身の出現アニメーションも JS に届いている
+        let appeared = (try? await panel.webView.evaluateJavaScript("document.body.classList.contains('appear')")) as? Bool
+        check("appear_animation", panel.panel.alphaValue == 1 && appeared == true,
+              "alpha=\(panel.panel.alphaValue) bodyAppear=\(String(describing: appeared))")
 
         // 6b. 掴んで動かせる場所・位置と大きさを覚える・元に戻す
         await windowFrame()
