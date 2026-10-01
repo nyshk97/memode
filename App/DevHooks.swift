@@ -739,6 +739,15 @@ final class SelfTest {
         await sleep(0.5)
         check("frame_reset_while_hidden", panel.isVisible && p.frame == expected && store.frame(for: id) == nil,
               "visible=\(panel.isVisible) frame=\(NSStringFromRect(p.frame))")
+        // ステータスバーの「元に戻す」ボタンからも戻せる
+        p.setFrame(moved, display: true)
+        await sleep(0.6)
+        let savedBeforeButton = store.frame(for: id) != nil
+        _ = try? await web.evaluateJavaScript("document.getElementById('status-reset-frame').click(); true")
+        await sleep(0.5)
+        check("frame_reset_status_button", savedBeforeButton && p.frame == expected && store.frame(for: id) == nil
+                && app.menuActionLog.last == MainMenu.Action.resetWindowFrame.rawValue,
+              "savedBefore=\(savedBeforeButton) frame=\(NSStringFromRect(p.frame)) last=\(app.menuActionLog.last ?? "nil")")
     }
 
     /// 前回の --selftest の終わりの状態（メモ・crlf.txt・未保存の変更がある saved.md）が戻っているか

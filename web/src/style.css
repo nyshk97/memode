@@ -146,6 +146,11 @@ body {
 #statusbar .clickable:hover {
   background: rgba(128, 128, 128, 0.2);
 }
+#status-reset-frame {
+  display: flex;
+  align-items: center;
+  height: 18px;
+}
 #status-version:not(.clickable) {
   padding: 0 6px;
 }

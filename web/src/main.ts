@@ -50,6 +50,11 @@ const dragRegions = new DragRegions(document.getElementById("groups")!);
 workspace.onRender = () => dragRegions.update();
 dragRegions.update();
 
+// ステータスバーの「元に戻す」。ウィンドウの位置とサイズを既定に戻す（メニューの同じ項目と同じ経路）
+document.getElementById("status-reset-frame")!.addEventListener("click", () => {
+  post({ type: "action", action: "reset_window_frame" });
+});
+
 // ステータスバーの右端の版。押すとアップデートを確認する（dev 版は Sparkle が無いので押せない）
 const statusVersion = document.getElementById("status-version")!;
 let canCheckForUpdates = false;
