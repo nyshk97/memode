@@ -44,6 +44,8 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-01
+
 ### 📝 Changed
 - セッションと最近使ったファイルの置き場所を `~/Memode` から `~/Memode Data` に変更
 
