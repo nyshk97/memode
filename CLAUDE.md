@@ -37,7 +37,7 @@
 | bundle id | local.nyshk97.memode.dev | local.nyshk97.memode |
 | URL スキーム | memode-dev:// | memode:// |
 | ログ | ~/Library/Logs/memode-dev/memode.log | ~/Library/Logs/memode/memode.log |
-| データ | ~/Memode-dev/ | ~/Memode/ |
+| データ | ~/Memode-dev/ | ~/Memode Data/（~/Memode はリポジトリ ~/memode とぶつかる） |
 
 ## ビルドと起動
 

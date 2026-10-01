@@ -9,7 +9,8 @@ enum AppInfo {
     #else
     static let isDev = false
     static let logDirName = "memode"
-    static let dataDirName = "Memode"
+    // "Memode" にしない: 大文字・小文字を区別しないディスクではリポジトリの ~/memode と同じ場所になり、データがリポジトリに書かれる
+    static let dataDirName = "Memode Data"
     #endif
 
     static var version: String {
