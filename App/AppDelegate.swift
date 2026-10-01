@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         #if !DEBUG
         _ = updaterController
         #endif
+        LoginItem.enableOnFirstLaunchIfNeeded()
         setUpStatusItem()
         shiftTapMonitor = ShiftTapMonitor { [weak self] in self?.panelController.toggle() }
         shiftTapMonitor.start()
@@ -187,6 +188,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSWorkspace.shared.open(AppInfo.dataDirectory)
     }
 
+    @objc private func toggleLoginItem(_ sender: Any?) {
+        switch LoginItem.state {
+        case .enabled: LoginItem.setEnabled(false)
+        case .disabled: LoginItem.setEnabled(true)
+        case .requiresApproval: LoginItem.openSystemSettings()
+        }
+    }
+
+    /// 開くたびに今の状態に合わせる（システム設定の側で切り替えられることがある）
+    private func updateLoginItemMenu(_ item: NSMenuItem) {
+        let state = LoginItem.state
+        item.title = state == .requiresApproval ? "ログイン時に起動（システム設定で許可が必要）" : "ログイン時に起動"
+        item.state = state == .enabled ? .on : .off
+    }
+
     @objc private func openAccessibilitySettings(_ sender: Any?) {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
@@ -239,6 +255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let dataFolder = NSMenuItem(title: "データのフォルダを開く", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         dataFolder.target = self
         menu.addItem(dataFolder)
+        let loginItem = NSMenuItem(title: "ログイン時に起動", action: #selector(toggleLoginItem(_:)), keyEquivalent: "")
+        loginItem.target = self
+        updateLoginItemMenu(loginItem)
+        menu.addItem(loginItem)
         if !AXIsProcessTrusted() {
             let warn = NSMenuItem(title: "⚠︎ アクセシビリティの許可が必要（左 Shift が効かない）", action: #selector(openAccessibilitySettings(_:)), keyEquivalent: "")
             warn.target = self
@@ -288,7 +308,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 extension AppDelegate {
     /// 開くたびに作り直す（アクセシビリティの許可の警告を今の状態に合わせる）
     func menuNeedsUpdate(_ menu: NSMenu) {
-        guard menu === statusItem.menu, AXIsProcessTrusted() else { return }
+        guard menu === statusItem.menu else { return }
+        if let item = menu.items.first(where: { $0.action == #selector(toggleLoginItem(_:)) }) {
+            updateLoginItemMenu(item)
+        }
+        guard AXIsProcessTrusted() else { return }
         if let i = menu.items.firstIndex(where: { $0.action == #selector(openAccessibilitySettings(_:)) }) {
             menu.removeItem(at: i)
         }

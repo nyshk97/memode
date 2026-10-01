@@ -95,6 +95,7 @@ targets:
       - path: App/FolderIndex.swift
       - path: App/Log.swift
       - path: App/AppInfo.swift
+      - path: App/LoginItem.swift
     settings:
       base:
         CODE_SIGN_IDENTITY: "-"

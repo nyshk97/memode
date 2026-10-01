@@ -32,6 +32,17 @@ enum DevHooks {
                 await SelfTest(app: app).runRestore()
                 if args.contains("--selftest-quit") { NSApp.terminate(nil) }
             }
+        } else if args.contains("--selftest-login-item") {
+            // ログイン項目の ON・OFF が通るか（dev 版を一瞬だけログイン項目に入れて、すぐ外す。--selftest には入れない:
+            // 入れるたびに「ログイン項目が追加されました」の通知が出る）
+            let before = LoginItem.state
+            LoginItem.setEnabled(true)
+            let on = LoginItem.state
+            LoginItem.setEnabled(false)
+            let off = LoginItem.state
+            let ok = before == .disabled && (on == .enabled || on == .requiresApproval) && off == .disabled
+            Log.write("selftest.login_item", "\(ok ? "OK" : "NG") before=\(before) on=\(on) off=\(off)")
+            NSApp.terminate(nil)
         } else if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
             // 表示が済んだらエディタ部分を PNG に保存する（UI の確認用）
             let path = args[i + 1]

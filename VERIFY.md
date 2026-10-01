@@ -78,6 +78,20 @@ for run in 1 2; do mise run stop >/dev/null; : > "$L"; open -g build/Build/Produ
 
 1 回目に `app.data_migrate moved ...` と `session.loaded docs=N`（移す前と同じ数）、2 回目は `app.data_migrate` が出ずに同じ置き場を読めば通っている。
 
+## ログイン時に起動
+
+`--selftest-login-item` で、dev 版を一瞬だけログイン項目に入れてすぐ外す（`--selftest` に入れていないのは、そのたびに
+「ログイン項目が追加されました」の通知が出るため）。初回の起動で一度だけ ON にする判定はユニットテスト（`LoginItemTests`）で見ている。
+
+```sh
+L=~/Library/Logs/memode-dev/memode.log; mise run stop; : > "$L"
+open -g build/Build/Products/Debug/Memode-dev.app --args --selftest-login-item --data-dir "$(mktemp -d)"
+for i in $(seq 1 30); do grep -q selftest.login_item "$L" && break; sleep 0.5; done; grep login_item "$L"
+```
+
+`selftest.login_item OK before=disabled on=enabled off=disabled` が出れば通っている。外したあとも `sfltool dumpbtm` には
+`Memode-dev ... Disposition: [disabled, ...]` の行が残るが、disabled ならログイン時には起動しない。
+
 ## memode コマンド
 
 dev 版を使い捨てのデータの置き場所で起動しておき、`--dev` で流す（付けないと常用版が起動する）。
