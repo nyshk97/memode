@@ -141,6 +141,23 @@ WID=$(osascript -l JavaScript -e 'ObjC.import("CoreGraphics"); const l=ObjC.deep
 screencapture -x -o -l "$WID" /tmp/memode-panel.png; mise run stop
 ```
 
+### 半透明の見え方（後ろを決めて撮る）
+
+パネルの下地は NSVisualEffectView なので、上の `screencapture -l`（ウィンドウだけ）では後ろが合成されず、ぼかしが**ただの灰色に写る**
+（素材を変えても全部同じ絵になる）。`scripts/backdrop-shot.swift` がパネルの真後ろに色付きの絵を出してから画面の領域ごと撮る。
+ライトは `-NSRequiresAquaSystemAppearance YES` でアプリだけライトにして撮れる（システムの設定は変えない）。
+
+```sh
+swiftc -O -o /tmp/backdrop-shot scripts/backdrop-shot.swift
+D=$(mktemp -d); mkdir -p "$D/home"; mise run stop
+open -g build/Build/Products/Debug/Memode-dev.app --args --demo --data-dir "$D" --index-home "$D/home"; sleep 4
+B=$(osascript -l JavaScript -e 'ObjC.import("CoreGraphics"); const w = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(1, 0))); const b = w.filter(x => x.kCGWindowOwnerName === "Memode-dev" && x.kCGWindowBounds.Height > 200)[0].kCGWindowBounds; [b.X, b.Y, b.Width, b.Height].join(" ")')
+/tmp/backdrop-shot ${=B} /tmp/memode-glass.png        # 末尾に busy を付けると色の縞（読みやすさの限界）
+mise run stop
+```
+
+- 枠（タブバー・ステータスバーのあたり）に後ろの色が透け、板（エディタ）の上の文字がはっきり読めれば OK
+
 ## 配布物（公証の手前まで）
 
 ```sh
