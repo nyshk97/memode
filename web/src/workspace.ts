@@ -37,6 +37,11 @@ const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   padding: { top: 8 },
   scrollBeyondLastLine: false,
   renderWhitespace: "selection",
+  // Tab は常に半角スペース 2 つ。ファイルの字下げからの推測はしない（モデルごとに updateOptions しても、
+  // エディタを作るたびに Monaco が全モデルをこの共通の設定に戻すので、ここで決める）
+  tabSize: 2,
+  insertSpaces: true,
+  detectIndentation: false,
   unicodeHighlight: { ambiguousCharacters: false, invisibleCharacters: false },
 };
 
