@@ -157,6 +157,15 @@ final class SelfTest {
         check("worker_loaded", (hl?["workerLoaded"] as? Bool) == true, "workerLoaded=\(hl?["workerLoaded"] ?? "nil")")
         await checkLanguages()
 
+        // 0.5 ウィンドウの幅を超えた行は折り返す（1 行の文書が画面上では 2 行以上になる。日本語だけの行も）
+        for (name, line) in [("ascii", String(repeating: "word ", count: 400)), ("japanese", String(repeating: "日本語の長い行", count: 200))] {
+            panel.bridge.send(["type": "setContent", "value": line, "language": "plaintext"])
+            await sleep(0.4)
+            let rows = (try? await panel.webView.evaluateJavaScript(
+                "document.querySelectorAll('.group.active .view-line').length")) as? Int ?? 0
+            check("word_wrap_\(name)", rows >= 2, "modelLines=1 viewLines=\(rows)")
+        }
+
         // 1. Cmd+Opt+↓ でカーソルが増える／Esc で戻る
         panel.bridge.send(["type": "setContent", "value": "aaa\nbbb\nccc"])
         await sleep(0.3)

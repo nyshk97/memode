@@ -37,6 +37,9 @@ const editorOptions: monaco.editor.IStandaloneEditorConstructionOptions = {
   padding: { top: 8 },
   scrollBeyondLastLine: false,
   renderWhitespace: "selection",
+  // ウィンドウの幅を超えた行は折り返す（字下げは元の行にそろえる）
+  wordWrap: "on",
+  wrappingIndent: "same",
   // Tab は常に半角スペース 2 つ。ファイルの字下げからの推測はしない（モデルごとに updateOptions しても、
   // エディタを作るたびに Monaco が全モデルをこの共通の設定に戻すので、ここで決める）
   tabSize: 2,
