@@ -44,6 +44,9 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+### 📝 Changed
+- ウィンドウの幅を超えた行を折り返して表示するように変更
+
 ## [1.0.0] - 2026-10-01
 
 ### ✨ Added
