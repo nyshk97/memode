@@ -44,6 +44,9 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+### 🐛 Fixed
+- 出した直後に文字を打つとウィンドウが少しずつ左へ動くのを修正
+
 ## [1.1.0] - 2026-10-23
 
 ### ✨ Added
