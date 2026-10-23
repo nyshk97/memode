@@ -1088,6 +1088,20 @@ final class SelfTest {
                 && caret?.line == 3 && near(caret?.point, CGPoint(x: anchor.x, y: anchor.y + gap)),
               "size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) caret=\(String(describing: caret)) anchor=\(anchor)")
 
+        // 1b. 出した直後に打っても、ウィンドウは動かない（キャレットが進んだのを、大きさを変えた後の測り直しと取り違えない）
+        panel.hide(reason: .toggle)
+        await sleep(0.3)
+        panel.show()
+        await sleep(0.15)
+        let placed = p.frame
+        var framesWhileTyping: [NSRect] = []
+        for ch in "mad" {
+            await typeText(String(ch))
+            framesWhileTyping.append(p.frame)
+        }
+        check("compact_stays_while_typing", framesWhileTyping.allSatisfy { $0 == placed },
+              "placed=\(NSStringFromRect(placed)) whileTyping=\(framesWhileTyping.map(NSStringFromRect))")
+
         // 2. ⌃⌘F がメニューに届いて広げる（既定は中央に 80%）
         await key(Key.f, [.control, .command], chars: "f")
         await sleep(0.4)

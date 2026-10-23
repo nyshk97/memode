@@ -74,8 +74,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// JS から最後に届いたキャレットの位置
     private(set) var caret: CaretInfo?
     /// 小さいサイズで置いた直後の、キャレットを合わせたい点（画面の座標）と期限。大きさを変えた直後は
-    /// キャレットの位置が変える前に測ったものなので、測り直したものが届いたら置き直す
-    private var pendingAnchor: (point: CGPoint, visible: CGRect, until: Date)?
+    /// キャレットの位置が変える前に測ったものなので、測り直したものが届いたら置き直す。
+    /// position は置いたときの文書の中のキャレットの位置で、これが変わったら（打った・クリックした）合わせ直すのをやめる
+    private var pendingAnchor: (point: CGPoint, visible: CGRect, until: Date, position: [Int]?)?
     /// マウスの位置。dev 版の自走の検証で差し替える（本物のマウスを動かさないため）
     var mouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
 
@@ -415,7 +416,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     private func placeCompact(anchor: CGPoint, visible: CGRect, compactSize: CGSize) {
         let frame = PanelFrameRules.compactFrame(size: compactSize, caret: estimatedCaret(for: compactSize), anchor: anchor, visible: visible)
         applyFrame(frame)
-        pendingAnchor = (anchor, visible, Date().addingTimeInterval(1.0))
+        pendingAnchor = (anchor, visible, Date().addingTimeInterval(1.0), caret?.position)
         bridge.send(["type": "revealCaret"])
     }
 
@@ -443,7 +444,9 @@ final class PanelController: NSObject, NSWindowDelegate {
             return
         }
         guard let pending = pendingAnchor else { return }
-        guard Date() < pending.until, isVisible, size == .compact, panel.frame == appliedFrame else {
+        // キャレットが文書の中で動いた（打った・クリックした）ものは測り直しではない。合わせ直すとウィンドウごと動いてしまう
+        guard Date() < pending.until, isVisible, size == .compact, panel.frame == appliedFrame,
+              pending.position == nil || pending.position == info.position else {
             pendingAnchor = nil
             return
         }

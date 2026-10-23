@@ -44,6 +44,8 @@ struct CaretInfo: Equatable {
     /// 測ったときのページの大きさ。ウィンドウの大きさと違えば、大きさを変える前に測ったもの
     var viewport: CGSize
     var split: Bool
+    /// 文書の中のキャレットの位置（行・列）。変わったら、打った・動かしたもの
+    var position: [Int]
 
     init?(_ body: [String: Any]) {
         guard let x = body["x"] as? Double, let y = body["y"] as? Double, let h = body["height"] as? Double,
@@ -51,6 +53,7 @@ struct CaretInfo: Equatable {
         rect = CGRect(x: x, y: y, width: 0, height: h)
         viewport = CGSize(width: vw, height: vh)
         split = body["split"] as? Bool ?? false
+        position = [body["line"] as? Int ?? 0, body["column"] as? Int ?? 0]
     }
 }
 

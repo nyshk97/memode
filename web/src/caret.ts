@@ -11,6 +11,9 @@ export interface CaretInfo {
   viewportHeight: number;
   /** 左右に分割しているか（分割しているときは広げたサイズで出す） */
   split: boolean;
+  /** 文書の中のキャレットの位置（1 始まり。無ければ 0）。Swift は、これが変わったら打った・動かしたとみなし、ウィンドウを合わせ直すのをやめる */
+  line: number;
+  column: number;
 }
 
 /** キャレットの位置を Swift に知らせる。小さいサイズのとき、キャレットがマウスのそばに来るようにウィンドウを置くために使う。
@@ -64,7 +67,13 @@ export class CaretReporter {
     const layout = editor.getLayoutInfo();
     const pos = editor.getPosition();
     const visible = pos ? editor.getScrolledVisiblePosition(pos) : null;
-    const base = { viewportWidth: window.innerWidth, viewportHeight: window.innerHeight, split: this.workspace.isSplit };
+    const base = {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      split: this.workspace.isSplit,
+      line: pos?.lineNumber ?? 0,
+      column: pos?.column ?? 0,
+    };
     if (
       visible &&
       visible.top >= 0 &&
