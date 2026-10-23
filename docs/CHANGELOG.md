@@ -44,6 +44,8 @@ Memode の更新履歴。形式は [Keep a Changelog](https://keepachangelog.com
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-23
+
 ### ✨ Added
 - ⌃⌘F（またはタブの右の空きのダブルクリック）でウィンドウを広げる・縮められるようにした
 
