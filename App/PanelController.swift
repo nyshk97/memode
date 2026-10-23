@@ -8,10 +8,16 @@ final class PopupPanel: NSPanel {
     /// 掴んで動かせる場所（タブバーのタブの右の空き）。JS が送ってくる、ページの左上からの位置（CSS px）。
     /// mousedown を JS に回してから動かし始めると間に合わないので、場所を先にもらっておいてここで判定する
     var dragRegions: [CGRect] = []
+    /// 掴んで動かせる場所をダブルクリックしたとき（広げる・縮める。macOS のタイトルバーのダブルクリックと同じ）
+    var onDoubleClickDragRegion: (() -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown, attachedSheet == nil, isDragRegion(event.locationInWindow) {
-            performDrag(with: event)
+            if event.clickCount == 2, let onDoubleClickDragRegion {
+                onDoubleClickDragRegion()
+            } else {
+                performDrag(with: event)
+            }
             return
         }
         super.sendEvent(event)
@@ -23,6 +29,13 @@ final class PopupPanel: NSPanel {
         if !view.isFlipped { p.y = view.bounds.height - p.y }
         return dragRegions.contains { $0.contains(p) }
     }
+}
+
+/// ウィンドウの大きさ。出すときは小さいサイズで、キャレットがマウスのそばに来るように置く。
+/// 広げると、画面ごとに覚えた位置と大きさ（覚えていなければ中央に 80%）になる
+enum PanelSize: String {
+    case compact
+    case expanded
 }
 
 /// ポップアップの出し入れ。WKWebView はパネルを作り直しても同じものを使い回す（中身を保つため）
@@ -56,6 +69,15 @@ final class PanelController: NSObject, NSWindowDelegate {
     /// 最後にこちらで置いた位置と大きさ。これと違っていたら、人が動かした・大きさを変えたとみなして覚える
     private var appliedFrame: NSRect?
     private var pendingFrameSave: DispatchWorkItem?
+    /// 今の大きさ（小さい・広げた）
+    private(set) var size: PanelSize = .compact
+    /// JS から最後に届いたキャレットの位置
+    private(set) var caret: CaretInfo?
+    /// 小さいサイズで置いた直後の、キャレットを合わせたい点（画面の座標）と期限。大きさを変えた直後は
+    /// キャレットの位置が変える前に測ったものなので、測り直したものが届いたら置き直す
+    private var pendingAnchor: (point: CGPoint, visible: CGRect, until: Date)?
+    /// マウスの位置。dev 版の自走の検証で差し替える（本物のマウスを動かさないため）
+    var mouseLocation: () -> NSPoint = { NSEvent.mouseLocation }
 
     init(style: PanelStyle, frameStore: PanelFrameStore) {
         self.style = style
@@ -70,6 +92,8 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView = backdrop
         panel.delegate = self
         bridge.onDragRegions = { [weak self] rects in self?.panel.dragRegions = rects }
+        bridge.onCaret = { [weak self] info in self?.caretDidChange(info) }
+        panel.onDoubleClickDragRegion = { [weak self] in self?.toggleSize() }
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
@@ -124,6 +148,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         panel.contentView = backdrop
         panel.delegate = self
         panel.dragRegions = regions
+        panel.onDoubleClickDragRegion = { [weak self] in self?.toggleSize() }
         panel.setFrame(frame, display: false)
         Log.write("panel.style_changed", newStyle.rawValue)
         if wasVisible { show() }
@@ -142,7 +167,17 @@ final class PanelController: NSObject, NSWindowDelegate {
         // 出ているときは動かさない（別の画面にマウスがあっても、今の場所のまま前に出すだけ）
         let wasHidden = !panel.isVisible
         if wasHidden {
-            applyFrame(frame(on: Self.mouseScreen()))
+            let mouse = mouseLocation()
+            let screen = Self.screen(containing: mouse)
+            // 左右に分割しているときは、小さいと狭すぎるので広げたサイズで出す
+            if caret?.split == true {
+                size = .expanded
+                pendingAnchor = nil
+                applyFrame(expandedFrame(on: screen))
+            } else {
+                size = .compact
+                placeCompact(anchor: mouse, visible: screen.visibleFrame, compactSize: compactSize(on: screen))
+            }
             panel.alphaValue = 0
         }
         if style == .activating {
@@ -159,17 +194,15 @@ final class PanelController: NSObject, NSWindowDelegate {
         }
         focusEditor()
         onShow?()
-        Log.write("panel.show", "style=\(style.rawValue) frame=\(NSStringFromRect(panel.frame))")
+        Log.write("panel.show", "style=\(style.rawValue) size=\(size.rawValue) frame=\(NSStringFromRect(panel.frame))")
     }
 
     func hide(reason: HideReason) {
         guard isVisible else { return }
         if isLent { endLend(reason: reason.rawValue) }
         // 動かしてすぐ隠したときも覚える
-        if let work = pendingFrameSave, !work.isCancelled {
-            work.cancel()
-            rememberFrame()
-        }
+        flushFrameSave()
+        pendingAnchor = nil
         panel.orderOut(nil)
         if reason == .focusLost { lastFocusLostHideAt = Date() }
         var restored = "-"
@@ -326,25 +359,101 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     // MARK: - 位置と大きさ
 
+    /// 広げる・縮める（⌃⌘F・タブの右の空きのダブルクリック）
+    func toggleSize() {
+        if !isVisible { show() }
+        setSize(size == .compact ? .expanded : .compact)
+    }
+
+    private func setSize(_ newSize: PanelSize) {
+        guard newSize != size else { return }
+        let screen = panel.screen ?? Self.screen(containing: mouseLocation())
+        // 縮めるときは、今キャレットが見えている場所に縮めた後のキャレットを置く（目線を動かさないため）
+        let anchor = caretAnchor() ?? mouseLocation()
+        flushFrameSave()
+        size = newSize
+        switch newSize {
+        case .expanded:
+            pendingAnchor = nil
+            applyFrame(expandedFrame(on: screen))
+        case .compact:
+            placeCompact(anchor: anchor, visible: screen.visibleFrame, compactSize: compactSize(on: screen))
+        }
+        Log.write("panel.size", "\(newSize.rawValue) frame=\(NSStringFromRect(panel.frame))")
+    }
+
     /// 出ている画面（隠れていればマウスのある画面）で覚えた位置と大きさを消し、既定の位置と大きさで出す
     func resetFrame() {
-        let screen = (isVisible ? panel.screen : nil) ?? Self.mouseScreen()
+        let screen = (isVisible ? panel.screen : nil) ?? Self.screen(containing: mouseLocation())
         pendingFrameSave?.cancel()
         if let id = screen.memodeID { frameStore.remove(screenID: id) }
-        Log.write("panel.frame_reset", "screen=\(screen.localizedName)")
-        if isVisible {
-            applyFrame(frame(on: screen))
-        } else {
-            show()
+        Log.write("panel.frame_reset", "screen=\(screen.localizedName) size=\(size.rawValue)")
+        guard isVisible else { return show() }
+        switch size {
+        case .expanded:
+            applyFrame(expandedFrame(on: screen))
+        case .compact:
+            placeCompact(anchor: caretAnchor() ?? mouseLocation(), visible: screen.visibleFrame, compactSize: compactSize(on: screen))
         }
     }
 
-    /// その画面で覚えた位置と大きさ（覚えていなければ既定）
-    func frame(on screen: NSScreen) -> NSRect {
+    /// その画面で覚えた、広げたときの位置と大きさ（覚えていなければ既定）
+    func expandedFrame(on screen: NSScreen) -> NSRect {
         if let id = screen.memodeID, let saved = frameStore.frame(for: id) {
             return PanelFrameRules.restore(saved, screenFrame: screen.frame, visible: screen.visibleFrame)
         }
         return PanelFrameRules.defaultFrame(visible: screen.visibleFrame)
+    }
+
+    /// その画面で覚えた、小さいときの大きさ（覚えていなければ既定）
+    func compactSize(on screen: NSScreen) -> CGSize {
+        screen.memodeID.flatMap(frameStore.compactSize(for:)) ?? PanelFrameRules.compactSize
+    }
+
+    /// 小さいサイズにして、キャレットが anchor のそばに来るように置く。キャレットの位置は今の大きさで測ったものしか無いので、
+    /// 大きさが変わるときはそれで仮に置き、測り直したものが届いたら置き直す（caretDidChange）
+    private func placeCompact(anchor: CGPoint, visible: CGRect, compactSize: CGSize) {
+        let frame = PanelFrameRules.compactFrame(size: compactSize, caret: estimatedCaret(for: compactSize), anchor: anchor, visible: visible)
+        applyFrame(frame)
+        pendingAnchor = (anchor, visible, Date().addingTimeInterval(1.0))
+        bridge.send(["type": "revealCaret"])
+    }
+
+    /// その大きさのときのキャレットの位置の見込み（今の大きさで測ったものをそのまま使い、縦は収まる範囲に寄せる）
+    private func estimatedCaret(for size: CGSize) -> CGRect {
+        guard let caret else { return CGRect(x: 60, y: 48, width: 0, height: 18) }
+        if caret.viewport == size { return caret.rect }
+        var rect = caret.rect
+        rect.origin.y = min(max(rect.minY, 48), max(48, size.height / 2))
+        return rect
+    }
+
+    /// 今キャレットが見えている場所（画面の座標。compactFrame の anchor に渡す点）。測ったあとに大きさが変わっていれば使わない
+    private func caretAnchor() -> CGPoint? {
+        guard isVisible, let caret, caret.viewport == webView.bounds.size else { return nil }
+        return PanelFrameRules.anchor(caret: caret.rect, frame: panel.frame)
+    }
+
+    private func caretDidChange(_ info: CaretInfo) {
+        let wasSplit = caret?.split ?? false
+        caret = info
+        // 小さいまま左右に分割した: 広げる
+        if info.split, !wasSplit, isVisible, size == .compact {
+            setSize(.expanded)
+            return
+        }
+        guard let pending = pendingAnchor else { return }
+        guard Date() < pending.until, isVisible, size == .compact, panel.frame == appliedFrame else {
+            pendingAnchor = nil
+            return
+        }
+        // 大きさを変える前に測ったもの（ページの大きさがまだ追いついていない）は待つ
+        guard info.viewport == webView.bounds.size else { return }
+        let frame = PanelFrameRules.compactFrame(size: panel.frame.size, caret: info.rect, anchor: pending.point, visible: pending.visible)
+        if frame != panel.frame {
+            applyFrame(frame)
+            Log.write("panel.caret_follow", "frame=\(NSStringFromRect(frame)) caret=\(NSStringFromRect(info.rect))")
+        }
     }
 
     private func applyFrame(_ frame: NSRect) {
@@ -360,19 +469,41 @@ final class PanelController: NSObject, NSWindowDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
+    /// まだ書いていない、動かした・大きさを変えたものを今書く（隠す・大きさを切り替える前に）
+    private func flushFrameSave() {
+        if let work = pendingFrameSave, !work.isCancelled {
+            work.cancel()
+            rememberFrame()
+        }
+    }
+
+    /// 広げているときは位置と大きさを、小さいときは大きさだけを覚える（小さいときの位置は出すたびに決める）
     private func rememberFrame() {
         let frame = panel.frame
         // 出す前にこちらで置いたとき・置いたままのときは覚えない（既定の位置を覚えてしまうと、画面の解像度が変わっても追従しなくなる）
         guard panel.isVisible, frame != appliedFrame, let screen = panel.screen, let id = screen.memodeID else { return }
+        let previous = appliedFrame
         appliedFrame = frame
-        frameStore.set(PanelFrameRules.relative(frame, screenFrame: screen.frame), for: id)
-        Log.write("panel.frame_saved", "screen=\(screen.localizedName) frame=\(NSStringFromRect(frame))")
+        // 人が動かした: キャレットを合わせ直すのはやめる
+        pendingAnchor = nil
+        switch size {
+        case .expanded:
+            frameStore.set(PanelFrameRules.relative(frame, screenFrame: screen.frame), for: id)
+            Log.write("panel.frame_saved", "screen=\(screen.localizedName) frame=\(NSStringFromRect(frame))")
+        case .compact:
+            guard frame.size != previous?.size else { return }
+            frameStore.setCompactSize(frame.size, for: id)
+            Log.write("panel.compact_size_saved", "screen=\(screen.localizedName) size=\(NSStringFromSize(frame.size))")
+        }
     }
 
     /// NSScreen.main は常駐アプリだと当てにならないので、マウスの位置から画面を探す
     static func mouseScreen() -> NSScreen {
-        let mouse = NSEvent.mouseLocation
-        return NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.screens[0]
+        screen(containing: NSEvent.mouseLocation)
+    }
+
+    static func screen(containing point: NSPoint) -> NSScreen {
+        NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.screens[0]
     }
 }
 

@@ -38,6 +38,22 @@ final class EditorSchemeHandler: NSObject, WKURLSchemeHandler {
     func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
 }
 
+/// JS から届くキャレットの位置（web/src/caret.ts）。rect はページの左上からの位置（CSS px = ウィンドウの pt）
+struct CaretInfo: Equatable {
+    var rect: CGRect
+    /// 測ったときのページの大きさ。ウィンドウの大きさと違えば、大きさを変える前に測ったもの
+    var viewport: CGSize
+    var split: Bool
+
+    init?(_ body: [String: Any]) {
+        guard let x = body["x"] as? Double, let y = body["y"] as? Double, let h = body["height"] as? Double,
+              let vw = body["viewportWidth"] as? Double, let vh = body["viewportHeight"] as? Double else { return nil }
+        rect = CGRect(x: x, y: y, width: 0, height: h)
+        viewport = CGSize(width: vw, height: vh)
+        split = body["split"] as? Bool ?? false
+    }
+}
+
 /// Swift と JS の受け渡し。JS の準備ができる前に来た要求はためておき、ready が来てから流す
 final class EditorBridge: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
@@ -46,6 +62,8 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
     var onAction: ((String) -> Void)?
     /// 掴んで動かせる場所（タブバーの空き。PopupPanel.dragRegions）
     var onDragRegions: (([CGRect]) -> Void)?
+    /// キャレットの位置が変わった（PanelController がウィンドウを置くのに使う）
+    var onCaret: ((CaretInfo) -> Void)?
     /// それ以外の要求（保存・セッション等。DocumentService が受ける）
     var onMessage: ((String, [String: Any]) -> Void)?
     private var pending: [[String: Any]] = []
@@ -70,6 +88,14 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
         let result = try? await webView.callAsyncJavaScript(
             "return window.memode.editorFocused()", arguments: [:], contentWorld: .page)
         return result as? Bool == true
+    }
+
+    /// キャレットの位置を今測って読む（dev 版の自走の検証用。ふだんは JS から送ってくる onCaret を使う）
+    func caretInfo() async -> CaretInfo? {
+        guard let webView else { return nil }
+        let result = try? await webView.callAsyncJavaScript(
+            "return window.memode.caretInfo()", arguments: [:], contentWorld: .page)
+        return (result as? [String: Any]).flatMap(CaretInfo.init)
     }
 
     /// JS 側の状態を読む（dev 版の自走の検証用）
@@ -108,6 +134,8 @@ final class EditorBridge: NSObject, WKScriptMessageHandler {
                 return CGRect(x: x, y: y, width: w, height: h)
             }
             onDragRegions?(rects)
+        case "caret":
+            if let info = CaretInfo(body) { onCaret?(info) }
         case "log":
             Log.write("js.\(body["event"] as? String ?? "?")", body["detail"] as? String ?? "")
         default:

@@ -115,6 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             documents.quickOpen()
         case .registerFolder:
             documents.chooseFolderToRegister()
+        case .toggleWindowSize:
+            panelController.toggleSize()
         case .resetWindowFrame:
             panelController.resetFrame()
         case .checkForUpdates:

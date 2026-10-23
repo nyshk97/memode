@@ -19,6 +19,8 @@ enum MainMenu {
         case toggleSplit = "toggle_split"
         case chooseLanguage = "choose_language"
         case registerFolder = "register_folder"
+        /// 広げる・縮める（⌃⌘F）
+        case toggleWindowSize = "toggle_window_size"
         /// 出ている画面で覚えた位置と大きさを消して、既定に戻す
         case resetWindowFrame = "reset_window_frame"
         /// ステータスバーの版の表示を押したとき（メニューには置かない）
@@ -65,6 +67,7 @@ enum MainMenu {
         let view = NSMenu()
         view.addItem(item("左右に分割", .toggleSplit, "\\"))
         view.addItem(item("言語を選ぶ…", .chooseLanguage, ""))
+        view.addItem(item("ウィンドウを広げる / 縮める", .toggleWindowSize, "f", [.control, .command]))
         view.addItem(item("ウィンドウの位置とサイズを元に戻す", .resetWindowFrame, ""))
         view.addItem(.separator())
         // Ctrl+Tab・Ctrl+Shift+Tab もここに来る操作だが、メニューのキーとしては届かないので bridge.ts で拾って回している

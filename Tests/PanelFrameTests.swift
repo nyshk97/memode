@@ -37,6 +37,63 @@ final class PanelFrameTests: XCTestCase {
         XCTAssertTrue(visible.contains(f))
     }
 
+    /// キャレットの行の左端がマウスの位置に、行の下端がマウスの少し上に来る
+    func testCompactFramePutsCaretAtAnchor() {
+        let caret = CGRect(x: 60, y: 100, width: 0, height: 18)
+        let anchor = CGPoint(x: 2500, y: 700)
+        let f = PanelFrameRules.compactFrame(size: CGSize(width: 720, height: 480), caret: caret, anchor: anchor, visible: visible)
+        XCTAssertEqual(f.size, CGSize(width: 720, height: 480))
+        XCTAssertEqual(f.minX + caret.minX, anchor.x)
+        XCTAssertEqual(f.maxY - caret.maxY, anchor.y + PanelFrameRules.caretGap)
+    }
+
+    /// マウスが画面の隅にあるときは、画面の中に収める
+    func testCompactFrameClampsIntoVisible() {
+        let caret = CGRect(x: 60, y: 100, width: 0, height: 18)
+        for anchor in [CGPoint(x: visible.maxX - 2, y: visible.minY + 2), CGPoint(x: visible.minX + 1, y: visible.maxY - 1)] {
+            let f = PanelFrameRules.compactFrame(size: CGSize(width: 720, height: 480), caret: caret, anchor: anchor, visible: visible)
+            XCTAssertTrue(visible.contains(f), "\(anchor) -> \(f)")
+        }
+    }
+
+    /// 画面より大きい大きさを覚えていても、画面に収まる大きさに縮める
+    func testCompactFrameShrinksToVisible() {
+        let small = CGRect(x: 0, y: 0, width: 600, height: 400)
+        let f = PanelFrameRules.compactFrame(size: CGSize(width: 720, height: 480), caret: CGRect(x: 60, y: 100, width: 0, height: 18),
+                                             anchor: CGPoint(x: 300, y: 200), visible: small)
+        XCTAssertEqual(f, small)
+    }
+
+    /// 縮めるときの anchor: 今のキャレットの場所に、縮めた後のキャレットが来る
+    func testAnchorKeepsCaretInPlace() {
+        let big = CGRect(x: 1700, y: 200, width: 1400, height: 900)
+        let caretInBig = CGRect(x: 80, y: 300, width: 0, height: 18)
+        let anchor = PanelFrameRules.anchor(caret: caretInBig, frame: big)
+        let caretInSmall = CGRect(x: 80, y: 140, width: 0, height: 18)
+        let f = PanelFrameRules.compactFrame(size: CGSize(width: 720, height: 480), caret: caretInSmall, anchor: anchor, visible: visible)
+        XCTAssertEqual(f.minX + caretInSmall.minX, big.minX + caretInBig.minX)
+        XCTAssertEqual(f.maxY - caretInSmall.maxY, big.maxY - caretInBig.maxY)
+    }
+
+    /// 小さいときの大きさも画面ごとに覚え、元に戻すと両方消える。v1.0.1 までの window.json（compact が無い）も読める
+    func testStoreCompactSize() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("memode-frame-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data(#"{"screens":{"A":{"x":10,"y":20,"width":800,"height":500}}}"#.utf8).write(to: dir.appendingPathComponent("window.json"))
+        let store = PanelFrameStore(directory: dir)
+        XCTAssertEqual(store.frame(for: "A"), CGRect(x: 10, y: 20, width: 800, height: 500))
+        XCTAssertNil(store.compactSize(for: "A"))
+        store.setCompactSize(CGSize(width: 640, height: 420), for: "A")
+        let reopened = PanelFrameStore(directory: dir)
+        XCTAssertEqual(reopened.compactSize(for: "A"), CGSize(width: 640, height: 420))
+        XCTAssertEqual(reopened.frame(for: "A"), CGRect(x: 10, y: 20, width: 800, height: 500))
+        reopened.remove(screenID: "A")
+        let again = PanelFrameStore(directory: dir)
+        XCTAssertNil(again.compactSize(for: "A"))
+        XCTAssertNil(again.frame(for: "A"))
+    }
+
     func testStorePersistsPerScreen() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("memode-frame-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

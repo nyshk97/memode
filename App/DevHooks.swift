@@ -1032,23 +1032,119 @@ final class SelfTest {
         check("drag_region_follows_resize", resized.map { abs($0.maxX - web.bounds.width) <= 1 } ?? false,
               "region=\(String(describing: resized)) width=\(web.bounds.width)")
 
-        // 動かした・大きさを変えたら覚え、隠して出し直すと同じ場所に出る
+        await windowSize()
+    }
+
+    /// 出すときは小さいサイズでキャレットがマウスのそばに来る・⌃⌘F とダブルクリックで広げる / 縮める・
+    /// 広げたときは位置と大きさ、小さいときは大きさだけを画面ごとに覚える・元に戻す。マウスの位置は差し替える（本物のマウスは動かさない）
+    private func windowSize() async {
+        let p = panel.panel
+        let web = panel.webView
+        guard let screen = p.screen, let id = screen.memodeID else { return }
         let store = panel.frameStore
         let visible = screen.visibleFrame
-        let moved = NSRect(x: visible.minX + 40, y: visible.minY + 60, width: 700, height: 450)
+        let gap = PanelFrameRules.caretGap
+        let realMouse = panel.mouseLocation
+        defer { panel.mouseLocation = realMouse }
+        store.remove(screenID: id)
+        // 前の検証が左右に分割したままなら戻す（分割しているときは広げたサイズで出すので）
+        let wasSplit = (await workspace()).groups.count > 1
+        if wasSplit {
+            panel.bridge.send(["type": "command", "name": "toggle_split", "index": 0])
+            await sleep(0.4)
+        }
+
+        /// キャレットの行の左下（画面の座標）と、何行目か
+        func caretOnScreen() async -> (point: CGPoint, line: Int)? {
+            guard let c = await panel.bridge.caretInfo(), c.viewport == web.bounds.size else { return nil }
+            let line = ((await panel.bridge.debugState())?["cursors"] as? [[String: Int]])?.first?["line"] ?? 0
+            return (CGPoint(x: p.frame.minX + c.rect.minX, y: p.frame.maxY - c.rect.maxY), line)
+        }
+        func near(_ a: CGPoint?, _ b: CGPoint, _ tolerance: CGFloat = 2) -> Bool {
+            guard let a else { return false }
+            return abs(a.x - b.x) <= tolerance && abs(a.y - b.y) <= tolerance
+        }
+        func showAt(_ point: NSPoint) async {
+            panel.hide(reason: .toggle)
+            await sleep(0.3)
+            panel.mouseLocation = { point }
+            panel.show()
+            await sleep(0.8)
+        }
+
+        // キャレットを 3 行目の途中に置く（1 行目の左上だと「エディタの左上に合わせた」のと区別が付かない）
+        panel.bridge.send(["type": "setContent", "value": "一行目\n二行目\n三行目のメモ\n四行目"])
+        await sleep(0.3)
+        await key(Key.down)
+        await key(Key.down)
+        await key(Key.right)
+        await key(Key.right)
+
+        // 1. 出すと小さいサイズで、キャレットの行の下端がマウスの少し上・左端がマウスの位置
+        let anchor = NSPoint(x: visible.minX + visible.width * 0.4, y: visible.minY + visible.height * 0.6)
+        await showAt(anchor)
+        var caret = await caretOnScreen()
+        check("compact_on_show", panel.size == .compact && p.frame.size == PanelFrameRules.compactSize
+                && caret?.line == 3 && near(caret?.point, CGPoint(x: anchor.x, y: anchor.y + gap)),
+              "size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) caret=\(String(describing: caret)) anchor=\(anchor)")
+
+        // 2. ⌃⌘F がメニューに届いて広げる（既定は中央に 80%）
+        await key(Key.f, [.control, .command], chars: "f")
+        await sleep(0.4)
+        let expandedDefault = PanelFrameRules.defaultFrame(visible: visible)
+        check("ctrl_cmd_f_expands", panel.size == .expanded && p.frame == expandedDefault
+                && app.menuActionLog.last == MainMenu.Action.toggleWindowSize.rawValue,
+              "size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) last=\(app.menuActionLog.last ?? "nil")")
+
+        // 3. もう一度 ⌃⌘F で縮める: 広げていたときにキャレットが見えていた場所に、縮めた後のキャレットが来る
+        let before = await caretOnScreen()
+        await key(Key.f, [.control, .command], chars: "f")
+        await sleep(0.8)
+        caret = await caretOnScreen()
+        check("ctrl_cmd_f_shrinks_keeping_caret", panel.size == .compact && p.frame.size == PanelFrameRules.compactSize
+                && before != nil && near(caret?.point, before?.point ?? .zero),
+              "size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) before=\(String(describing: before)) after=\(String(describing: caret))")
+
+        // 4. 広げたまま隠しても、次は小さいサイズでマウスのそばに出る（大きさが変わるので、測り直したキャレットで置き直す）
+        await key(Key.f, [.control, .command], chars: "f")
+        await sleep(0.4)
+        let anchor2 = NSPoint(x: visible.minX + visible.width * 0.55, y: visible.minY + visible.height * 0.45)
+        await showAt(anchor2)
+        caret = await caretOnScreen()
+        check("compact_after_expanded", panel.size == .compact && near(caret?.point, CGPoint(x: anchor2.x, y: anchor2.y + gap)),
+              "size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) caret=\(String(describing: caret)) anchor=\(anchor2)")
+
+        // 5. 画面の右下の隅にマウスがあっても、画面の中に収める
+        await showAt(NSPoint(x: visible.maxX - 3, y: visible.minY + 3))
+        check("compact_clamped", visible.contains(p.frame) && p.frame.size == PanelFrameRules.compactSize,
+              "frame=\(NSStringFromRect(p.frame)) visible=\(NSStringFromRect(visible))")
+
+        // 6. 小さいときに大きさを変えたら大きさだけ覚え（広げたときのものは覚えない）、次も同じ大きさで出す
+        let resized = NSRect(x: p.frame.minX - 200, y: p.frame.minY, width: 860, height: 520)
+        p.setFrame(resized, display: true)
+        await sleep(0.6)
+        check("compact_size_saved", store.compactSize(for: id) == resized.size && store.frame(for: id) == nil,
+              "compact=\(String(describing: store.compactSize(for: id))) expanded=\(String(describing: store.frame(for: id)))")
+        await showAt(anchor)
+        check("compact_size_restored", p.frame.size == resized.size, "frame=\(NSStringFromRect(p.frame))")
+
+        // 7. 広げたときに動かしたら位置と大きさを覚え、次に広げると同じ場所に出る
+        panel.toggleSize()
+        await sleep(0.3)
+        let moved = NSRect(x: visible.minX + 40, y: visible.minY + 60, width: 900, height: 600)
         p.setFrame(moved, display: true)
         await sleep(0.6)
         let fileHasScreen = (try? String(contentsOf: store.fileURL, encoding: .utf8))?.contains(id) == true
-        check("frame_saved", store.frame(for: id) == PanelFrameRules.relative(moved, screenFrame: screen.frame) && fileHasScreen,
-              "saved=\(String(describing: store.frame(for: id))) file=\(fileHasScreen)")
-        panel.hide(reason: .toggle)
+        check("frame_saved", store.frame(for: id) == PanelFrameRules.relative(moved, screenFrame: screen.frame)
+                && store.compactSize(for: id) == resized.size && fileHasScreen,
+              "saved=\(String(describing: store.frame(for: id))) compact=\(String(describing: store.compactSize(for: id))) file=\(fileHasScreen)")
+        await showAt(anchor)
+        panel.toggleSize()
         await sleep(0.3)
-        panel.show()
-        await sleep(0.5)
-        check("frame_restored", p.frame == moved, "frame=\(NSStringFromRect(p.frame)) expected=\(NSStringFromRect(moved)) mouseScreen=\(PanelController.mouseScreen().localizedName)")
+        check("frame_restored", p.frame == moved, "frame=\(NSStringFromRect(p.frame)) expected=\(NSStringFromRect(moved))")
 
         // 動かしてすぐ隠しても覚えている
-        let moved2 = NSRect(x: visible.minX + 80, y: visible.minY + 90, width: 720, height: 460)
+        let moved2 = NSRect(x: visible.minX + 80, y: visible.minY + 90, width: 920, height: 610)
         p.setFrame(moved2, display: true)
         panel.hide(reason: .toggle)
         check("frame_saved_on_quick_hide", store.frame(for: id) == PanelFrameRules.relative(moved2, screenFrame: screen.frame),
@@ -1056,37 +1152,82 @@ final class SelfTest {
 
         // 覚えた場所が今の画面からはみ出す（解像度を下げた等）: 画面の中に収める
         store.set(CGRect(x: screen.frame.width - 100, y: -300, width: visible.width + 500, height: 400), for: id)
-        panel.show()
-        await sleep(0.5)
+        await showAt(anchor)
+        panel.toggleSize()
+        await sleep(0.3)
         check("frame_clamped", visible.contains(p.frame) && p.frame.width == visible.width,
               "frame=\(NSStringFromRect(p.frame)) visible=\(NSStringFromRect(visible))")
 
-        // 元に戻す（メニューの項目から）: 既定の位置と大きさになり、覚えたものが消える
+        // 8. タブの右の空き（掴んで動かせる場所）のダブルクリックで縮める・広げる
+        func doubleClickDragRegion() async -> Bool {
+            guard let r = p.dragRegions.last else { return false }
+            let point = web.convert(NSPoint(x: r.midX, y: web.isFlipped ? r.midY : web.bounds.height - r.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard let e = NSEvent.mouseEvent(
+                    with: type, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: p.windowNumber, context: nil, eventNumber: 0, clickCount: 2, pressure: 1) else { return false }
+                NSApp.sendEvent(e)
+            }
+            await sleep(0.8)
+            return true
+        }
+        let sent1 = await doubleClickDragRegion()
+        let afterFirst = panel.size
+        let sent2 = await doubleClickDragRegion()
+        check("double_click_toggles_size", sent1 && sent2 && afterFirst == .compact && panel.size == .expanded,
+              "sent=\(sent1),\(sent2) first=\(afterFirst.rawValue) second=\(panel.size.rawValue) regions=\(p.dragRegions)")
+
+        // 9. 小さいまま左右に分割すると広げる。分割しているときは広げたサイズで出す
+        panel.toggleSize()
+        await sleep(0.4)
+        let compactBeforeSplit = panel.size
+        panel.bridge.send(["type": "command", "name": "toggle_split", "index": 0])
+        await sleep(0.6)
+        let afterSplit = panel.size
+        await showAt(anchor)
+        check("split_expands", compactBeforeSplit == .compact && afterSplit == .expanded && panel.size == .expanded,
+              "before=\(compactBeforeSplit.rawValue) afterSplit=\(afterSplit.rawValue) afterShow=\(panel.size.rawValue)")
+        panel.bridge.send(["type": "command", "name": "toggle_split", "index": 0])
+        await sleep(0.4)
+
+        // 10. 元に戻す（メニューの項目から）: 広げているときは既定の位置と大きさになり、覚えたもの（小さいときの大きさも）が消える
         let item = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items)
             .first { $0.representedObject as? String == MainMenu.Action.resetWindowFrame.rawValue }
         if let item { app.menuAction(item) }
         await sleep(0.5)
-        let expected = PanelFrameRules.defaultFrame(visible: visible)
-        check("frame_reset", item != nil && p.frame == expected && store.frame(for: id) == nil,
-              "frame=\(NSStringFromRect(p.frame)) expected=\(NSStringFromRect(expected)) saved=\(String(describing: store.frame(for: id)))")
-        // 隠れているときに元に戻すと、既定の位置で出す（メニューバーのメニューを開くとフォーカスが外れて隠れるため）
+        check("frame_reset", item != nil && panel.size == .expanded && p.frame == expandedDefault
+                && store.frame(for: id) == nil && store.compactSize(for: id) == nil,
+              "size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) saved=\(String(describing: store.frame(for: id))) compact=\(String(describing: store.compactSize(for: id)))")
+        // 隠れているときに元に戻すと、小さいサイズでマウスのそばに出す（メニューバーのメニューを開くとフォーカスが外れて隠れるため）
         p.setFrame(moved, display: true)
         await sleep(0.6)
         panel.hide(reason: .toggle)
         await sleep(0.3)
         panel.resetFrame()
-        await sleep(0.5)
-        check("frame_reset_while_hidden", panel.isVisible && p.frame == expected && store.frame(for: id) == nil,
-              "visible=\(panel.isVisible) frame=\(NSStringFromRect(p.frame))")
-        // ステータスバーの「元に戻す」ボタンからも戻せる
-        p.setFrame(moved, display: true)
+        await sleep(0.8)
+        caret = await caretOnScreen()
+        check("frame_reset_while_hidden", panel.isVisible && panel.size == .compact && p.frame.size == PanelFrameRules.compactSize
+                && store.frame(for: id) == nil && near(caret?.point, CGPoint(x: anchor.x, y: anchor.y + gap)),
+              "visible=\(panel.isVisible) size=\(panel.size.rawValue) frame=\(NSStringFromRect(p.frame)) caret=\(String(describing: caret))")
+        // ステータスバーの「元に戻す」ボタンからも戻せる（小さいときは大きさが既定に戻る）
+        p.setFrame(NSRect(origin: p.frame.origin, size: CGSize(width: 800, height: 500)), display: true)
         await sleep(0.6)
-        let savedBeforeButton = store.frame(for: id) != nil
+        let savedBeforeButton = store.compactSize(for: id) != nil
         _ = try? await web.evaluateJavaScript("document.getElementById('status-reset-frame').click(); true")
         await sleep(0.5)
-        check("frame_reset_status_button", savedBeforeButton && p.frame == expected && store.frame(for: id) == nil
+        check("frame_reset_status_button", savedBeforeButton && p.frame.size == PanelFrameRules.compactSize && store.compactSize(for: id) == nil
                 && app.menuActionLog.last == MainMenu.Action.resetWindowFrame.rawValue,
               "savedBefore=\(savedBeforeButton) frame=\(NSStringFromRect(p.frame)) last=\(app.menuActionLog.last ?? "nil")")
+
+        // 11. ⌃⌘F をほかのメニュー項目が使っていない（macOS が足す「フルスクリーンにする」等）
+        let ctrlCmdF = (NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items) ?? [])
+            .filter { $0.keyEquivalent.lowercased() == "f" && $0.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask) == [.control, .command] }
+        check("ctrl_cmd_f_unique", ctrlCmdF.count == 1, "items=\(ctrlCmdF.map(\.title))")
+        // 後の検証のために、分割の状態を元に戻す
+        if wasSplit {
+            panel.bridge.send(["type": "command", "name": "toggle_split", "index": 0])
+            await sleep(0.4)
+        }
     }
 
     /// 前回の --selftest の終わりの状態（メモ・crlf.txt・未保存の変更がある saved.md）が戻っているか
@@ -1142,7 +1283,7 @@ final class SelfTest {
         static let a: UInt16 = 0, s: UInt16 = 1, x: UInt16 = 7, c: UInt16 = 8, v: UInt16 = 9
         static let w: UInt16 = 13, one: UInt16 = 18, o: UInt16 = 31, p: UInt16 = 35, backslash: UInt16 = 42
         static let n: UInt16 = 45, tab: UInt16 = 48, escape: UInt16 = 53
-        static let h: UInt16 = 4, y: UInt16 = 16, t: UInt16 = 17, enter: UInt16 = 36
+        static let f: UInt16 = 3, h: UInt16 = 4, y: UInt16 = 16, t: UInt16 = 17, enter: UInt16 = 36
         static let left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125
     }
 

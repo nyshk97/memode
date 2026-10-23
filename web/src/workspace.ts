@@ -94,6 +94,8 @@ export class Workspace {
   onLastTabClosed?: () => void;
   /** タブバーを描き直したとき（掴んで動かせる場所を Swift に送り直す） */
   onRender?: () => void;
+  /** キャレットが動いた・スクロールした・エディタの大きさが変わったとき（キャレットの位置を Swift に送り直す） */
+  onViewChange?: () => void;
 
   constructor(
     private container: HTMLElement,
@@ -152,6 +154,10 @@ export class Workspace {
     return this.docs.get(g.active)!;
   }
 
+  get isSplit(): boolean {
+    return this.groups.length > 1;
+  }
+
   get activeEditor(): monaco.editor.IStandaloneCodeEditor {
     return this.groups[this.activeGroup].editor;
   }
@@ -183,7 +189,12 @@ export class Workspace {
         this.render();
       }
     });
-    editor.onDidChangeCursorPosition(() => this.renderStatus());
+    editor.onDidChangeCursorPosition(() => {
+      this.renderStatus();
+      this.onViewChange?.();
+    });
+    editor.onDidScrollChange(() => this.onViewChange?.());
+    editor.onDidLayoutChange(() => this.onViewChange?.());
     this.groups.push(group);
     return group;
   }

@@ -1,3 +1,5 @@
+import type { CaretInfo } from "./caret";
+
 // Swift と JS の受け渡し。エディタの実装（Monaco / CodeMirror）には依存しない。
 // Swift → JS: window.memode.receive(msg)
 // JS → Swift: window.webkit.messageHandlers.memode.postMessage(msg)
@@ -7,6 +9,8 @@ export type FromSwift =
   /** 隠れていたパネルを出したとき（中身の出現アニメーション。ウィンドウのフェードは Swift 側） */
   | { type: "appear" }
   | { type: "setContent"; value: string; language?: string }
+  /** ウィンドウを小さくしたとき。キャレットが見えていなければ見える所までスクロールする */
+  | { type: "revealCaret" }
   /** 今の版と、見つかった新しい版（ステータスバーの右端に出す） */
   | { type: "appInfo"; version: string; dev: boolean; update: string | null }
   /** メニューの操作（new_tab・close_tab・select_tab・next_tab・previous_tab・toggle_split・choose_language・save・save_as） */
@@ -23,6 +27,8 @@ export type ToSwift =
   | { type: "action"; action: string }
   /** 掴んでウィンドウを動かせる場所（タブバーの空き）。ページの左上からの位置 */
   | { type: "dragRegions"; rects: { x: number; y: number; width: number; height: number }[] }
+  /** キャレットの位置（caret.ts の CaretInfo。変わったときだけ送る） */
+  | ({ type: "caret" } & CaretInfo)
   /** 保存・セッション・ファイルまわり（Swift の DocumentService が受ける） */
   | { type: "session" | "sessionSkipped" | "openPaths" | "quickOpenResend" | "save" | "confirmClose" | "fileStates" | "askConflict"; [key: string]: unknown };
 
@@ -48,6 +54,9 @@ export interface DebugState {
 export interface EditorHost {
   focus(): void;
   appear(): void;
+  revealCaret(): void;
+  /** キャレットの位置（Swift がウィンドウを置く直前に読む） */
+  caretInfo(): CaretInfo;
   setContent(value: string, language?: string): void;
   command(name: string, index?: number): void;
   setAppInfo(info: Extract<FromSwift, { type: "appInfo" }>): void;
@@ -66,6 +75,7 @@ declare global {
       receive(msg: FromSwift): void;
       debugState(): DebugState;
       editorFocused(): boolean;
+      caretInfo(): CaretInfo;
       detectLanguage(path: string, content?: string): string;
     };
   }
@@ -88,6 +98,9 @@ export function install(host: EditorHost): void {
         case "appear":
           host.appear();
           break;
+        case "revealCaret":
+          host.revealCaret();
+          break;
         case "setContent":
           host.setContent(msg.value, msg.language);
           break;
@@ -103,6 +116,7 @@ export function install(host: EditorHost): void {
     },
     debugState: () => host.debugState(),
     editorFocused: () => host.editorFocused(),
+    caretInfo: () => host.caretInfo(),
     detectLanguage: (path, content) => host.detectLanguage(path, content),
   };
   // Ctrl+Tab は macOS のメニューのキーとしては届かないので、ここで拾って Swift に回す

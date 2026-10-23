@@ -7,6 +7,7 @@ import { quickPickDebug, showQuickPick } from "./quickpick";
 import { Workspace } from "./workspace";
 import { FileController } from "./files";
 import { DragRegions } from "./dragregions";
+import { CaretReporter } from "./caret";
 import "./style.css";
 
 // 言語サービス（TS・JSON 等）は入れていないので、worker はエディタ本体の 1 種類だけ。
@@ -48,8 +49,14 @@ const workspace = new Workspace(
 const files = new FileController(workspace);
 workspace.onLastTabClosed = () => post({ type: "action", action: "hide_panel" });
 const dragRegions = new DragRegions(document.getElementById("groups")!);
-workspace.onRender = () => dragRegions.update();
+const caret = new CaretReporter(workspace);
+workspace.onRender = () => {
+  dragRegions.update();
+  caret.update();
+};
+workspace.onViewChange = () => caret.update();
 dragRegions.update();
+caret.update();
 
 // ステータスバーの「元に戻す」。ウィンドウの位置とサイズを既定に戻す（メニューの同じ項目と同じ経路）
 document.getElementById("status-reset-frame")!.addEventListener("click", () => {
@@ -70,6 +77,8 @@ const host: EditorHost = {
     void document.body.offsetWidth;
     document.body.classList.add("appear");
   },
+  revealCaret: () => caret.reveal(),
+  caretInfo: () => caret.measure(),
   setContent(value, language) {
     const model = workspace.activeDoc.model;
     model.setValue(value);
